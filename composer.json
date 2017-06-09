@@ -1,0 +1,25 @@
+{
+    "name": "poweronsystem/databaseservice",
+    "version": "dev-master",
+    "description": "Database services for web framework.",
+    "keywords": ["database", "mysql", "orm"],
+    "homepage": "https://github.com/poweronsystem/databaseservice",
+    "license": "GPL",
+    "authors": [
+        {
+            "name": "Lucas Sosa",
+            "email": "sosalucas87@gmail.com",
+            "homepage": "http://www.poweronsistemas.com.ar",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "poweronsystem/webframework": "dev-master"
+    },
+    "minimum-stability": "stable",
+    "autoload": {
+        "psr-4": {
+            "PowerOn\\Database\\": "src"
+        }
+    }
+}
