@@ -16,10 +16,17 @@
     "require": {
         "poweronsystem/webframework": "dev-master"
     },
-    "minimum-stability": "stable",
+    "require-dev": {
+        "kint-php/kint": "^2.1"
+    },
     "autoload": {
         "psr-4": {
             "PowerOn\\Database\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\": "test/src"
         }
     }
 }

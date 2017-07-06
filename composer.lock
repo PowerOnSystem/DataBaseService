@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "87cb52c7301538305251e2b5ebed3dfb",
+    "content-hash": "87c79dcc712707ca8291d152e6a67f1d",
     "packages": [
         {
             "name": "altorouter/altorouter",
@@ -178,16 +178,16 @@
         },
         {
             "name": "monolog/monolog",
-            "version": "1.22.1",
+            "version": "1.23.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Seldaek/monolog.git",
-                "reference": "1e044bc4b34e91743943479f1be7a1d5eb93add0"
+                "reference": "fd8c787753b3a2ad11bc60c063cff1358a32a3b4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Seldaek/monolog/zipball/1e044bc4b34e91743943479f1be7a1d5eb93add0",
-                "reference": "1e044bc4b34e91743943479f1be7a1d5eb93add0",
+                "url": "https://api.github.com/repos/Seldaek/monolog/zipball/fd8c787753b3a2ad11bc60c063cff1358a32a3b4",
+                "reference": "fd8c787753b3a2ad11bc60c063cff1358a32a3b4",
                 "shasum": ""
             },
             "require": {
@@ -208,7 +208,7 @@
                 "phpunit/phpunit-mock-objects": "2.3.0",
                 "ruflin/elastica": ">=0.90 <3.0",
                 "sentry/sentry": "^0.13",
-                "swiftmailer/swiftmailer": "~5.3"
+                "swiftmailer/swiftmailer": "^5.3|^6.0"
             },
             "suggest": {
                 "aws/aws-sdk-php": "Allow sending log messages to AWS services like DynamoDB",
@@ -252,7 +252,7 @@
                 "logging",
                 "psr-3"
             ],
-            "time": "2017-03-13T07:08:03+00:00"
+            "time": "2017-06-19T01:22:40+00:00"
         },
         {
             "name": "pimple/pimple",
@@ -306,12 +306,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/PowerOnSystem/WebFramework.git",
-                "reference": "56cea8db64cb977960dbe87c71f590a44ee12ab3"
+                "reference": "a6ae791255a7159e19968b1ddab1826d1800b8a3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PowerOnSystem/WebFramework/zipball/56cea8db64cb977960dbe87c71f590a44ee12ab3",
-                "reference": "56cea8db64cb977960dbe87c71f590a44ee12ab3",
+                "url": "https://api.github.com/repos/PowerOnSystem/WebFramework/zipball/a6ae791255a7159e19968b1ddab1826d1800b8a3",
+                "reference": "a6ae791255a7159e19968b1ddab1826d1800b8a3",
                 "shasum": ""
             },
             "require": {
@@ -322,14 +322,17 @@
                 "php": ">=5.4",
                 "pimple/pimple": "^3.0"
             },
+            "require-dev": {
+                "kint-php/kint": "^2.1"
+            },
             "type": "library",
             "autoload": {
                 "psr-4": {
                     "PowerOn\\": "src"
                 },
                 "files": [
-                    "src/Application/DefaultConfiguration.php",
                     "src/Application/Functions.php",
+                    "src/Application/Configuration.php",
                     "src/Application/Bootstrap.php"
                 ]
             },
@@ -352,7 +355,7 @@
                 "web design",
                 "web utilities"
             ],
-            "time": "2017-06-09 18:30:12"
+            "time": "2017-07-03 13:01:08"
         },
         {
             "name": "psr/log",
@@ -402,7 +405,66 @@
             "time": "2016-10-10T12:19:37+00:00"
         }
     ],
-    "packages-dev": [],
+    "packages-dev": [
+        {
+            "name": "kint-php/kint",
+            "version": "2.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/kint-php/kint.git",
+                "reference": "df63cec9406b44e10a316138ce47d8da7e9868d5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/kint-php/kint/zipball/df63cec9406b44e10a316138ce47d8da7e9868d5",
+                "reference": "df63cec9406b44e10a316138ce47d8da7e9868d5",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.1.2"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^2.0",
+                "phpunit/phpunit": "^4.0",
+                "symfony/finder": "^2.6"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "init.php"
+                ],
+                "classmap": [
+                    "src/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Rokas Šleinius",
+                    "homepage": "https://github.com/raveren"
+                },
+                {
+                    "name": "Jonathan Vollebregt",
+                    "homepage": "https://github.com/jnvsor"
+                },
+                {
+                    "name": "Contributors",
+                    "homepage": "https://github.com/kint-php/kint/graphs/contributors"
+                }
+            ],
+            "description": "Kint - debugging tool for PHP developers",
+            "homepage": "https://kint-php.github.io/kint/",
+            "keywords": [
+                "debug",
+                "kint",
+                "php"
+            ],
+            "time": "2017-06-20T18:21:30+00:00"
+        }
+    ],
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
