@@ -29,6 +29,9 @@ use PowerOn\Controller\Controller;
 class IndexController extends Controller {
 
     public function index() {
-        
+        $table = $this->database->get('users');
+        $results = $table->fetch('all', ['contain' => ['profiles', 'comments']]);
+        !d($table->debug());
+        !d($results);
     }
 }

@@ -84,7 +84,12 @@ class Model {
      * @var array
      */
     private $_log_query = [];
-
+    /**
+     * Consulta en modo espera
+     * @var array
+     */
+    private $_stand_query = [];
+    
     const SELECT_QUERY = 'select';
     const UPDATE_QUERY = 'update';
     const DELETE_QUERY = 'delete';
@@ -124,7 +129,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function find($table) {
-        return $this->init($table, self::SELECT_QUERY);
+        return $this->initialize($table, self::SELECT_QUERY);
     }
     
     /**
@@ -133,7 +138,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function update($table) {
-        return $this->init($table, self::UPDATE_QUERY);
+        return $this->initialize($table, self::UPDATE_QUERY);
     }
     
     /**
@@ -142,7 +147,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function delete($table) {
-        return $this->init($table, self::DELETE_QUERY);
+        return $this->initialize($table, self::DELETE_QUERY);
     }
     
     /**
@@ -151,7 +156,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function insert($table) {
-        return $this->init($table, self::INSERT_QUERY);
+        return $this->initialize($table, self::INSERT_QUERY);
     }
     
     /**
@@ -160,12 +165,45 @@ class Model {
      * @param type $activity
      * @return \PowerOn\Database\Model
      */
-    private function init($table, $activity) {
-        $this->reset();
+    private function initialize($table, $activity) {
+        if ( $this->_activity ) {
+            array_push($this->_stand_query, [
+                '_table_name' => $this->_table_name,
+                '_activity' => $this->_activity,
+                '_conditions' => $this->_conditions,
+                '_joins' => $this->_joins,
+                '_fields' => $this->_fields,
+                '_limit' => $this->_limit,
+                '_values' => $this->_values,
+                '_order' => $this->_order,
+                '_tables' => $this->_tables,
+            ]);
+        }
+        
         $this->_table_name = $table;
         $this->_activity = $activity;
+        $this->_conditions = [];
+        $this->_joins = [];
+        $this->_fields = [];
+        $this->_limit = [];
+        $this->_values = [];
+        $this->_order = [];
+        $this->_tables = [];
 
         return $this;
+    }
+    
+    private function finalize() {
+        if ( $this->_stand_query ) {
+            $last_stand = end($this->_stand_query);
+            foreach ($last_stand as $sq) {
+                $this->{ $sq };
+            }
+            array_pop($this->_stand_query);
+        } else {
+            $this->_activity = NULL;
+            $this->_table_name = NULL;
+        }
     }
     
     /**
@@ -177,11 +215,11 @@ class Model {
      * <li><b>Usando máscara</b>: ['field_1', 'other_field' => 'field_2'] <i>Equivalente a </i> <code>SELECT `field_2` AS `other_field`</code></li>
      * </ul>
      * </pre>
-     * @param array $fields
+     * @param array|string $fields
      * @return \PowerOn\Database\Model
      */
-    public function select(array $fields) {
-        $this->_fields = $fields;
+    public function select($fields) {
+        $this->_fields = is_array($fields) ? $fields : [$fields];
 
         return $this;
     }
@@ -308,12 +346,11 @@ class Model {
      * @return array
      */
     public function column($field) {
-        $query = $this->getQuery($this->getSelectQuery());
+        $query = $this->runQuery($this->getSelectQuery());
         $column = [];
         while( $result = $query->fetch_assoc() ) {
             $column[] = key_exists($field, $result) ? $result[$field] : NULL;
         }
-        
         return $column;
     }
     
@@ -326,7 +363,7 @@ class Model {
      * @return array
      */
     public function columnCombine($field_value, $field_key = 'id') {
-        $query = $this->getQuery($this->getSelectQuery());
+        $query = $this->runQuery($this->getSelectQuery());
         $column = [];
         while ($result = $query->fetch_assoc() ) {
             $value = NULL;
@@ -344,7 +381,7 @@ class Model {
             
             $column[key_exists($field_key, $result) ? $result[$field_key] : count($column)] = $value;
         }
-        
+
         return $column;
     }
     
@@ -364,8 +401,8 @@ class Model {
      * @return array
      */
     public function all() {
-        $query = $this->getQuery($this->getSelectQuery());
-        return $query->fetch_assoc();
+        $query = $this->runQuery($this->getSelectQuery());
+        return $query->fetch_all(MYSQLI_ASSOC);
     }
     
     /**
@@ -373,7 +410,7 @@ class Model {
      * @return integer
      */
     public function count() {
-        $query = $this->getQuery($this->getSelectQuery());
+        $query = $this->runQuery($this->getSelectQuery());
         return $query->num_rows;
     }
     
@@ -382,9 +419,9 @@ class Model {
      * @return array
      */
     public function allByID() {
-        $query = $this->getQuery($this->getSelectQuery());
+        $query = $this->runQuery($this->getSelectQuery());
         $results = [];
-        while ( $data = $query->fetch_assoc() ) {
+        while ( $data = $query->fetch_all(MYSQLI_ASSOC) ) {
             $results[key_exists('id', $data) ? $data['id'] : count($results)] = $data;
         }
         return $results;
@@ -396,7 +433,7 @@ class Model {
      */
     public function first() {
         $this->limit(1);
-        $query = $this->getQuery($this->getSelectQuery());
+        $query = $this->runQuery($this->getSelectQuery());
         return $query->fetch_assoc();
     }
     
@@ -429,9 +466,9 @@ class Model {
         }
         
         switch ($this->_activity) {
-            case self::INSERT_QUERY:    return $this->getQuery($this->getInsertQuery());
-            case self::UPDATE_QUERY:    return $this->getQuery($this->getUpdateQuery());
-            case self::DELETE_QUERY:    return $this->getQuery($this->getDeleteQuery());
+            case self::INSERT_QUERY:    return $this->runQuery($this->getInsertQuery());
+            case self::UPDATE_QUERY:    return $this->runQuery($this->getUpdateQuery());
+            case self::DELETE_QUERY:    return $this->runQuery($this->getDeleteQuery());
             default: throw new DevException(sprintf('No se reconoce la actividad (%s)', $this->_activity));
         }
     }
@@ -446,7 +483,7 @@ class Model {
             case self::UPDATE_QUERY:    return $this->getUpdateQuery();
             case self::DELETE_QUERY:    return $this->getDeleteQuery();
             case self::SELECT_QUERY:    return $this->getSelectQuery();
-            default:                    return 'No hay actividad iniciada';
+            default:                    return $this->_log_query;
         }
     }
     
@@ -480,7 +517,7 @@ class Model {
      */
     private function getSelectQuery() {
         return 'SELECT ' 
-            . ($this->_fields ? $this->processFields() : ($this->_joins ? $this->_table_name . '.*' : '*')) 
+            . ($this->_fields ? $this->processFields() : '*') 
             . ' FROM ' . $this->_table_name
             . ($this->_joins ? $this->processJoin() : NULL)
             . ($this->_conditions ? $this->processCondition() : NULL )
@@ -529,7 +566,7 @@ class Model {
      * @param String $query La consulta en la base de datos
      * @return \mysqli_result Devuelve el resultado de la consulta, o FALSE en caso de error
      */
-    private function getQuery($query) {
+    private function runQuery($query) {
             $this->_log_query[] = $query;
             $data = $this->_connect->query($query);
 
@@ -543,24 +580,12 @@ class Model {
                 );
             }
             
-            return $this->_activity == self::INSERT_QUERY ? $this->_connect->insert_id : $data;
+            $return = $this->_activity == self::INSERT_QUERY ? $this->_connect->insert_id : $data;
+            $this->finalize();
+            
+            return $return;
     }
-    
-    /**
-     * Limpia el contenido antes de realizar una nueva consulta
-     */
-    private function reset() {
-        $this->_table_name = NULL;
-        $this->_activity = NULL;
-        $this->_conditions = [];
-        $this->_joins = [];
-        $this->_fields = [];
-        $this->_limit = [];
-        $this->_values = [];
-        $this->_order = [];
-        $this->_tables = [];
-    }
-    
+        
     /**
      * Procesa los valores a insertar o actualizar de la consulta
      * @return type
@@ -607,8 +632,10 @@ class Model {
                 }
                 $new_fields[] = implode(',', $new_sub_fields);
             } else {
-                $new_fields[] = (is_string($table) ? '`' . $this->_connect->real_escape_string($table) . '`.' : '') 
-                    . ($field == '*' ? '*' : '`' . $this->_connect->real_escape_string($field) . '`');
+                $new_fields[] = $field == '*' && !in_array($table, $this->_tables) 
+                        ? '`' . $this->_connect->real_escape_string($this->_table_name) . '`.*' : (
+                        (is_string($table) ? '`' . $this->_connect->real_escape_string($table) . '`.' : '')
+                    . ($field == '*' ? '*' : '`' . $this->_connect->real_escape_string($field) . '`'));
             }
         }
         

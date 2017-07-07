@@ -29,5 +29,6 @@ class Users extends Table {
     
     public function initialize() {
         $this->hasOne('profiles');
+        $this->hasMany('comments');
     }
 }

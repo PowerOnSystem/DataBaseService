@@ -40,6 +40,11 @@ class Table {
      * @var Model
      */
     protected $_model = NULL;
+    /**
+     * Nombre de la tabla
+     * @var string
+     */
+    private $_table_name = NULL;
     
     public function __construct(Model $connect) {
         $class = explode('\\', get_called_class());
@@ -51,14 +56,6 @@ class Table {
      * Inicialización de una tabla, en este método se incluyen las configuraciones pertenecientes a la tabla hija
      */
     public function initialize() {}
-
-    /**
-     * Setea manualmente el nombre de la tabla en caso que no siga las normas estandar de nombramientos del framework
-     * @param string $table Nombre real de la tabla en la base de datos
-     */
-    protected function setTableName($table) {
-        $this->_table_name = addslashes($table);
-    }
         
     /**
      * Verifica si existe un registro 
@@ -71,10 +68,46 @@ class Table {
     }
     
     /**
+     * Obtiene la entidad vinculada con la tabla
+     * @param array|integer $condition Condiciones de la entidad o el ID
+     * @param array|string $fields [Opcional] Campos a cargar en la entidad
+     * @return Entity
+     */
+    public function get($condition = [], $fields = []) {
+        $data = [];
+        if ( is_numeric($condition) ) {
+            $data = $this->_model->find($this->_table_name)->select($fields)->id($condition);
+        } else if ( is_array($condition) ) {
+            $data = $this->_model->find($this->_table_name)->select($fields)->where($condition)->first();
+        }
+        
+        return $this->newEntity($data ? $data : []);
+    }
+    
+    /**
+     * Obtiene la entidad vinculada con la tabla
+     * @param array|integer $conditions Condiciones de la entidad o el ID
+     * @param array|string $fields [Opcional] Campos a cargar en la entidad
+     * @return Entity
+     */
+    public function newEntity(array $data = []) {
+        $class_name = 'App\Model\Entities\\' . Inflector::classify(Inflector::singularize($this->_table_name));
+        if ( !class_exists($class_name) ) {
+            throw new DevException(sprintf('La clase (%s) no existe', $class_name), ['table' => $this->_table_name]);
+        }
+        
+        /* @var $entity Entity */
+        $entity = new $class_name();
+        $entity->fill($data);
+        $entity->initialize();
+        
+        return $entity;
+    }
+    
+    /**
      * Devuelve los resultados encontrados
      * @param string $mode Modo en que se devuelven los resultados
      * @param array $options Opciones de configuración de los resultados
-     * @param mix $__   Más parámetros a pasar al procesador de resultados
      * @return array
      */
     public function fetch($mode = 'all', array $options = []) {
@@ -91,7 +124,7 @@ class Table {
 
         $this->_model->find($this->_table_name);
         if ($config['fields']) {
-            $this->_model->select($config['fields']);
+            $this->_model->select(is_array($config['fields']) ? $config['fields'] : [$config['fields']]);
         }
         if ($config['join']) {
             $this->_model->join($config['join']);
@@ -105,21 +138,7 @@ class Table {
         if ($config['limit']) {
             $this->_model->limit($config['limit']);
         }
-        if ($config['contain']) {
-            $contain = is_array($config['contain']) ? $config['contain'] : [$config['contain']];
-            $joins = [];
-            foreach ($contain as $c) {
-                if ( !key_exists($c, $this->_joins) ) {
-                    throw new DevException(sprintf('La asociación (%s) no fue configurada en la tabla', $c));
-                }
-                $joins[$c] = $this->_joins[$c];
-            }
-            $this->_model->join($joins);
-            
-            $contain_result = array_combine(array_values($contain), array_fill(0, count($contain), '*'));
-
-            $this->_model->pushFields($contain_result);
-        }
+        
         $method_mode = 'fetch' . Inflector::classify($mode);
 
         if ( !method_exists($this, $method_mode) ) {
@@ -129,7 +148,78 @@ class Table {
         
         $args = array_diff_key($options, $default);
         
-        return $this->{ $method_mode } ( $args );
+        $results = $this->{ $method_mode } ( $args );
+
+        if ($config['contain']) {
+            $results = $this->proccessContain(is_array($config['contain']) ? $config['contain'] : [$config['contain']], $results);
+        }
+        
+        return $results;
+    }
+    
+    /**
+     * Agrega o modifica una entidad solicitada
+     * @param \PowerOn\Database\Entity $entity Entidad a guardar
+     * @return boolean
+     */
+    public function save(Entity $entity) {
+        if ( $entity->id ) {
+            $update = [];
+            if ( $entity->_data ) {
+                foreach ($entity->_data as $name => $value) {
+                    if ( property_exists($entity, $name) && $value != $entity->{ $name } ) {
+                        $update[$name] = is_array($entity->{ $name }) ? json_encode_clean($entity->{ $name }) : $entity->{ $name };
+                    }
+                }
+            }
+            
+            if ( $update ) {
+                return  $this->_model->update($this->_table_name)->set($update)->where(['id' => $entity->id])->execute();
+            }
+
+            return TRUE;
+        } else {
+            $properties = get_object_vars($entity);
+            $values = [];
+            foreach ($properties as $key => $value) {
+                if ( $value !== NULL && !(is_array($value) && !$value) && substr($key, 0, 1) != '_' ) {
+                    $values[$key] = is_array($value) ? json_encode_clean($value) : $value;
+                }
+            }
+
+            if ($values) {
+                $entity->id = $this->_model->insert($this->_table_name)->values($values)->execute();
+                return $entity->id;
+            }
+        }
+                
+        return FALSE;
+    }
+    
+    /**
+     * Elimina la entidad de la base de datos
+     * @param \PowerOn\Database\Entity $entity La entidad a eliminar
+     * @return boolean
+     */
+    public function delete(Entity $entity) {
+        if ( $entity->id ) {
+            return $this->_model->delete($this->_table_name)->where(['id' => $entity->id])->execute();
+        }
+        
+        return FALSE;
+    }
+    
+    public function debug() {
+        $log_query = $this->_model->debug();
+        return $log_query;
+    }
+    
+    /**
+     * Setea manualmente el nombre de la tabla en caso que no siga las normas estandar de nombramientos del framework
+     * @param string $table Nombre real de la tabla en la base de datos
+     */
+    protected function setTableName($table) {
+        $this->_table_name = addslashes($table);
     }
     
     /**
@@ -241,43 +331,6 @@ class Table {
     }
     
     /**
-     * Obtiene la entidad vinculada con la tabla
-     * @param array|integer $condition Condiciones de la entidad o el ID
-     * @param array|string $fields [Opcional] Campos a cargar en la entidad
-     * @return Entity
-     */
-    public function get($condition = [], $fields = []) {
-        $data = [];
-        if ( is_numeric($condition) ) {
-            $data = $this->_model->find($this->_table_name)->select($fields)->id($condition);
-        } else if ( is_array($condition) ) {
-            $data = $this->_model->find($this->_table_name)->select($fields)->where($condition)->first();
-        }
-        
-        return $this->newEntity($data ? $data : []);
-    }
-    
-    /**
-     * Obtiene la entidad vinculada con la tabla
-     * @param array|integer $conditions Condiciones de la entidad o el ID
-     * @param array|string $fields [Opcional] Campos a cargar en la entidad
-     * @return Entity
-     */
-    public function newEntity(array $data = []) {
-        $class_name = 'App\Model\Entities\\' . Inflector::classify(Inflector::singularize($this->_table_name));
-        if ( !class_exists($class_name) ) {
-            throw new DevException(sprintf('La clase (%s) no existe', $class_name), ['table' => $this->_table_name]);
-        }
-        
-        /* @var $entity Entity */
-        $entity = new $class_name();
-        $entity->fill($data);
-        $entity->initialize();
-        
-        return $entity;
-    }
-    
-    /**
      * Crea una asociación a una tabla unica, un usuario puede tener asociado un perfil único.
      * <pre>
      * Ejemplo: <code>$table->hasOne('profiles');</code>
@@ -291,8 +344,11 @@ class Table {
      * @param string $join_field [Opcional] El campo identificador de la tabla a vincular, por defecto es <i>id</i>
      */
     protected function hasOne( $table, $field = NULL, $join_field = 'id' ) {
-        $link_field = $field ? $field : 'id_' . strtolower(Inflector::singularize($table));
-        $this->_joins[$table] = [$join_field => [$link_field, $this->_table_name, '=', 'INNER']];
+        $this->_joins[$table] = [
+            'mode' => 'hasOne', 
+            'field' => $field, 
+            'join_field' => $join_field
+        ];
     }
     
     /**
@@ -309,82 +365,48 @@ class Table {
      * @param string $join_field [Opcional] El campo identificador de la tabla a vincular, por defecto es <i>id</i>
      */
     protected function hasMany( $table, $field = NULL, $join_field = 'id' ) {
-        $link_field = $field ? $field : 'id_' . strtolower(Inflector::singularize($table));
-        $this->_joins[$table] = [$join_field => [$link_field]];
+        $this->_joins[$table] = [
+            'mode' => 'hasMany', 
+            'field' => $field, 
+            'join_field' => $join_field
+        ];
     }
     
     /**
-     * Crea una asociación a una tabla unica, es lo inverso a hasOne en dirección contraria, perfil único pertenece a un usuario específico.
-     * <pre>
-     * Ejemplo: <code>$table->belongsTo('users');</code>
-     * El resultado SQL resultante:
-     * <code>SELECT * FROM profiles LEFT JOIN users ON users.id = profiles.id_user</code>
-     * </pre>
-     * @param string $table Nombre de la tabla  vincular
-     * @param string $field [Opcional] Campo de la base de datos que guarda el ID de la tabla a vincular,
-     * por defecto el framework utiliza <i>id_(nombre_tabla_en_singular)</i>, por ejemplo si el nombre de la tabla es
-     * profiles, el campo resultante por defecto sería <i>id_profile</i>
-     * @param string $join_field [Opcional] El campo identificador de la tabla a vincular, por defecto es <i>id</i>
+     * Procesa las asocianciones configuradas en la tabla actual
+     * @param array $contain Las asociaciones solicitadas
+     * @param array $results Los resultados devueltos de la consulta principal
+     * @return array Devuelve un array con las asociaciones agregadas
+     * @throws DevException
      */
-    protected function belongsTo( $table, $field = NULL, $join_field = 'id') {
-        $link_field = $field ? $field : 'id_' . strtolower(Inflector::singularize($table));
-        $this->_joins[$table] = [$join_field => [$link_field]];
-    }
-    
-    protected function belongsToMany( $table, $field = NULL, $namespace = NULL, $property = NULL ) {
-        $link = $field ? $field : 'id_' . strtolower($table);
-        $link_table = $property ? $property : $table;
-    }
-    
-    /**
-     * Agrega o modifica una entidad solicitada
-     * @param \PowerOn\Database\Entity $entity Entidad a guardar
-     * @return boolean
-     */
-    public function save(Entity $entity) {
-        if ( $entity->id ) {
-            $update = [];
-            if ( $entity->_data ) {
-                foreach ($entity->_data as $name => $value) {
-                    if ( property_exists($entity, $name) && $value != $entity->{ $name } ) {
-                        $update[$name] = is_array($entity->{ $name }) ? json_encode_clean($entity->{ $name }) : $entity->{ $name };
+    private function proccessContain(array $contain = [], array $results = []) {
+        $new_results = $results;
+        foreach ($contain as $table) {
+            if ( !key_exists($table, $this->_joins) ) {
+                throw new DevException(sprintf('La asociación (%s) no fue configurada en la tabla', $table));
+            }
+            $data = $this->_joins[$table];
+            switch ($data['mode']) {
+                case 'hasOne':
+                    $table_singular = strtolower(Inflector::singularize($table));
+                    $field = $data['field'] ? $data['field'] : 'id_' . $table_singular;
+                    $join_field = $data['join_field'] ? $data['join_field'] : 'id';
+                    foreach ($results as $key => $result) {
+                        $new_results[$key][$table_singular] = $result[$field] ? 
+                                $this->_model->find($table)->where([$join_field => $result[$field]])->first() : [];
                     }
-                }
-            }
-            
-            if ( $update ) {
-                return  $this->_model->update($this->_table_name)->set($update)->where(['id' => $entity->id])->execute();
-            }
-
-            return TRUE;
-        } else {
-            $properties = get_object_vars($entity);
-            $values = [];
-            foreach ($properties as $key => $value) {
-                if ( $value !== NULL && !(is_array($value) && !$value) && substr($key, 0, 1) != '_' ) {
-                    $values[$key] = is_array($value) ? json_encode_clean($value) : $value;
-                }
-            }
-
-            if ($values) {
-                $entity->id = $this->_model->insert($this->_table_name)->values($values)->execute();
-                return $entity->id;
+                    break;
+                case 'hasMany':
+                    $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($this->_table_name));
+                    $join_field = $data['join_field'] ? $data['join_field'] : 'id';
+                    foreach ($results as $key => $result) {
+                        $new_results[$key][$table] = $this->_model->find($table)->where([$field => $result[$join_field]])->all();
+                    }
+                    break;
+                default:
+                    break;
             }
         }
-                
-        return FALSE;
-    }
-    
-    /**
-     * Elimina la entidad de la base de datos
-     * @param \PowerOn\Database\Entity $entity La entidad a eliminar
-     * @return boolean
-     */
-    public function delete(Entity $entity) {
-        if ( $entity->id ) {
-            return $this->_model->delete($this->_table_name)->where(['id' => $entity->id])->execute();
-        }
-        
-        return FALSE;
+        return $new_results;
     }
 }
