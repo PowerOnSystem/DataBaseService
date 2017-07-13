@@ -59,7 +59,7 @@ class Database {
         $this->_service = $service_provider;
         $this->_model = new Model($this->_service);
         $this->_config = $config + [
-            'tables_namespace' => 'App\Model\Tables\\'
+            'tables_namespace' => 'App\Model\\'
         ];
     }
     
@@ -71,8 +71,8 @@ class Database {
      */
     public function get($table_request) {
         if ( !key_exists($table_request, $this->_table_registry) ) {
-            $table_class = ($this->_config['tables_namespace'] ? $this->_config['tables_namespace'] : 'App\Model\Tables\\') 
-                . Inflector::classify($table_request);
+            $table_class = ($this->_config['tables_namespace'] ? $this->_config['tables_namespace'] : 'App\Model\\') 
+                . 'Tables\\' . Inflector::classify($table_request);
             
             if ( !class_exists($table_class) ) {
                 throw new DataBaseServiceException(sprintf('No existe la tabla (%s) con la clase (%s)', $table_request, $table_class));
