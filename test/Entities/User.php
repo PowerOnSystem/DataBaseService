@@ -16,19 +16,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-namespace App\Model\Tables;
 
-use PowerOn\Database\Table;
+namespace App\Entities;
+use PowerOn\Database\Entity;
+
 /**
- * Users
+ * User
  * @author Lucas Sosa
  * @version 0.1
  * @copyright (c) 2016, Lucas Sosa
  */
-class Users extends Table {
-    
-    public function initialize() {
-        $this->hasOne('profiles');
-        $this->hasMany('comments');
-    }
+class User extends Entity {
+
+    public $id;
+    public $name;
+    public $lastname;
+    public $user;
 }

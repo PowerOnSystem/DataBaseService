@@ -16,17 +16,30 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-namespace App\Model\Entities;
-use PowerOn\Database\Entity;
+
+namespace PowerOn\Database;
 
 /**
- * User
+ * DataBaseException
  * @author Lucas Sosa
  * @version 0.1
-  */
-class User extends Entity {
+ */
+class DataBaseServiceException extends \Exception {
+    /**
+     * Datos del error PDO
+     * @var array
+     */
+    private $_context = [];
+    /**
+     * Excepcion de la base de datos
+     * @param type $error_message
+     */
+    public function __construct($error_message, array $context = []) {
+        parent::__construct($error_message);
+        $this->_context = $context;
+    }
 
-    public $id;
-    public $name;
-    public $user;
+    public function getContext() {
+        return $this->_context;
+    }
 }

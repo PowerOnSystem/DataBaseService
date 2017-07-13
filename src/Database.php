@@ -18,9 +18,9 @@
  */
 
 namespace PowerOn\Database;
-use PowerOn\Exceptions\DevException;
+
 use PowerOn\Utility\Inflector;
-use PowerOn\Utility\Config;
+
 /**
  * Database
  * @author Lucas Sosa
@@ -34,7 +34,7 @@ class Database {
     private $_table_registry = [];
     /**
      * Servcio de base de datos, por defecto MySQLi
-     * @var \mysqli
+     * @var \PDO
      */
     private $_service;
     /**
@@ -43,58 +43,39 @@ class Database {
      */
     private $_model;
     /**
-     * Inicializa la configuración de la base de datos
-     * @throws DevException
+     * Configuración de la herramienta
+     * @var type 
      */
-    public function __construct() {
-        $host = Config::get('DataBaseService.host');
-        $user = Config::get('DataBaseService.user');
-        $password = Config::get('DataBaseService.password');
-        $database = Config::get('DataBaseService.database');
-        $port = Config::get('DataBaseService.port');
-        
-        if ( !$host ) {
-            throw new DevException('No se configur&oacute; la base de datos correctamente, '
-                    . 'verifique la configuraci&oacute;n de la aplicaci&oacute;n.');
-        }
-        
-        $this->_service = @new \mysqli($host, $user, $password, $database, $port);
-        
-        if ( $this->_service->connect_errno ) {
-            throw new DevException('Error al conectar la base de datos', [
-                    'mysql_code' => $this->_service->connect_errno, 
-                    'mysql_message'  => $this->_service->connect_error,
-                    'mysql_host' => $host, 
-                    'mysql_user' => $user, 
-                    'mysql_password' => $password,
-                    'mysql_database' => $database
-                ]
-            );
-        }
-        
-        if ( !$this->_service->set_charset('utf8') ) {
-            throw new DevException('Error al establecer la codificaci&oacute;n a UTF-8', [
-                    'mysql_code' => $this->_service->errno, 
-                    'mysql_message' => $this->_service->error
-                ]
-            );
-        }
-        
+    private $_config = [];
+    /**
+     * Inicializa la configuración de la base de datos
+     * @param \PDO $service_provider Servicio de base de datos
+     * @param array $config Configuración de la herramienta:
+     * <ul>
+     *  <li><i>tables_namespace</i> : namespace de la ubicación de las tablas (Por defecto es <code>App\Model\Tables\\</code>)
+     * </ul>
+     */
+    public function __construct(\PDO $service_provider = NULL, array $config = []) {
+        $this->_service = $service_provider;
         $this->_model = new Model($this->_service);
+        $this->_config = $config + [
+            'tables_namespace' => 'App\Model\Tables\\'
+        ];
     }
     
     /**
      * Devuelve una instancia de la tabla solicitada
      * @param string $table_request Nombre de la tabla
-     * @throws DevException
+     * @throws DataBaseServiceException
      * @return Table
      */
     public function get($table_request) {
         if ( !key_exists($table_request, $this->_table_registry) ) {
-            $table_class = 'App\Model\Tables\\' . Inflector::classify($table_request);
+            $table_class = ($this->_config['tables_namespace'] ? $this->_config['tables_namespace'] : 'App\Model\Tables\\') 
+                . Inflector::classify($table_request);
             
             if ( !class_exists($table_class) ) {
-                throw new DevException(sprintf('No existe la tabla (%s) con la clase (%s)', $table_request, $table_class));
+                throw new DataBaseServiceException(sprintf('No existe la tabla (%s) con la clase (%s)', $table_request, $table_class));
             }
             
             /* @var $table Table */
@@ -104,5 +85,9 @@ class Database {
         }
         
         return $this->_table_registry[$table_request];
+    }
+    
+    public function model() {
+        return $this->_model;
     }
 }
