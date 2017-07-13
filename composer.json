@@ -1,6 +1,6 @@
 {
     "name": "poweronsystem/databaseservice",
-    "type": "dev-master",
+    "type": "library",
     "description": "Database services for web framework.",
     "keywords": ["database", "mysql", "orm"],
     "homepage": "https://github.com/poweronsystem/databaseservice",
