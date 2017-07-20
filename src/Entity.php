@@ -19,7 +19,6 @@
 
 namespace PowerOn\Database;
 
-use function \PowerOn\Application\is_json;
 /**
  * Entity
  * @author Lucas Sosa
@@ -54,7 +53,7 @@ class Entity {
             foreach ($data as $name => $value) {
                 if ( property_exists($this, $name) ) {
                     $this->{ $name } = is_array($this->{ $name }) ? 
-                    ($value && is_json($value) ? json_decode($value, TRUE) : []) : $value;
+                    (json_decode($value) ? json_decode($value, TRUE) : []) : $value;
                 }
             }
         }

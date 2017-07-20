@@ -1,8 +1,8 @@
 {
     "name": "poweronsystem/databaseservice",
     "type": "library",
-    "description": "Database services for web framework.",
-    "keywords": ["database", "mysql", "orm"],
+    "description": "Database service.",
+    "keywords": ["database", "mysql", "orm", "sql", "pdo"],
     "homepage": "https://github.com/poweronsystem/databaseservice",
     "license": "GPL",
     "authors": [
@@ -14,7 +14,7 @@
         }
     ],
     "require": {
-        "poweronsystem/utility": "dev-master"
+        "poweronsystem/webutility": "^0.1.0"
     },
     "require-dev": {
         "kint-php/kint": "^2.1"
