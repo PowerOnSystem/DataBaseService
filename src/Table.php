@@ -68,9 +68,10 @@ class Table {
      * Obtiene la entidad vinculada con la tabla
      * @param array|integer $condition Condiciones de la entidad o el ID
      * @param array|string $fields [Opcional] Campos a cargar en la entidad
+     * @param array|string $contain [Opcional] Associaciones a cargar
      * @return Entity
      */
-    public function get($condition = [], $fields = []) {
+    public function get($condition = [], $fields = [], $contain = []) {
         $data = [];
         if ( is_numeric($condition) ) {
             $data = $this->_model->select($fields)->from($this->_table_name)->id($condition)->toArray();
@@ -78,7 +79,13 @@ class Table {
             $data = $this->_model->select($fields)->from($this->_table_name)->where($condition)->first()->toArray();
         }
         
-        return $this->newEntity($data ? $data : []);
+        $entity = $this->newEntity($data ? $data : []);
+        
+        if ( $contain ) {
+            $this->processAssociation(is_array($contain) ? $contain : [$contain], [$entity]);
+        }
+        
+        return $entity;
     }
     
     /**
@@ -86,6 +93,7 @@ class Table {
      * @param array|integer $conditions Condiciones de la entidad o el ID
      * @param array|string $fields [Opcional] Campos a cargar en la entidad
      * @return Entity
+     * @throws \InvalidArgumentException
      */
     public function newEntity(array $data = []) {
         $reflection = new \ReflectionClass($this);
@@ -95,7 +103,7 @@ class Table {
         
         $class_name = $namespace . '\Entities\\' . Inflector::classify(Inflector::singularize($this->_table_name));
         if ( !class_exists($class_name) ) {
-            throw new DataBaseServiceException(sprintf('La clase (%s) no existe', $class_name), ['table' => $this->_table_name]);
+            throw new \InvalidArgumentException(sprintf('La clase (%s) no existe', $class_name));
         }
         
         /* @var $entity Entity */
@@ -105,7 +113,7 @@ class Table {
         
         return $entity;
     }
-    
+
     /**
      * Devuelve los resultados encontrados
      * @param string $mode Modo en que se devuelven los resultados
@@ -161,7 +169,7 @@ class Table {
         $results = $this->{ $method_mode } ( $args );
 
         if ($config['contain']) {
-            $results = $this->proccessContain(is_array($config['contain']) ? $config['contain'] : [$config['contain']], $results);
+            $results = $this->processAssociation(is_array($config['contain']) ? $config['contain'] : [$config['contain']], $results);
         }
         
         return $results;
@@ -274,7 +282,7 @@ class Table {
         $this->_model->fields([$column]);
 
         if ( !$column ) {
-            throw new DataBaseServiceException('Debe especificar la columna a obtener, agregue el valor'
+            throw new \InvalidArgumentException('Debe especificar la columna a obtener, agregue el valor'
                     . ' "column" del array de configuraci&oacute;n');
         }
         return $this->_model->all()->column($column);
@@ -289,7 +297,7 @@ class Table {
         $field = key_exists('field', $config) ? $config['field'] : NULL;
         
         if ( !$field ) {
-            throw new DataBaseServiceException('Debe especificar la celda a obtener, agregue el valor "field" del array de configuraci&oacute;n');
+            throw new \InvalidArgumentException('Debe especificar la celda a obtener, agregue el valor "field" del array de configuraci&oacute;n');
         }
         
         $this->_model->fields($field);
@@ -308,7 +316,7 @@ class Table {
         $field_value = key_exists('fieldValue', $config) ? $config['fieldValue'] : NULL;
         
         if (!$field_value) {
-                throw new DataBaseServiceException('Debe especificar por lo menos el campo a utilizar como valor del array,'
+                throw new \InvalidArgumentException('Debe especificar por lo menos el campo a utilizar como valor del array,'
                     . ' agregue el valor "fieldValue" al array de configuraci&oacute;n');
         }
         
@@ -408,44 +416,103 @@ class Table {
      * @return array Devuelve un array con las asociaciones agregadas
      * @throws DataBaseServiceException
      */
-    private function proccessContain(array $contain, array $results = []) {
+    private function processAssociation(array $contain, array $results) {
         $new_results = $results;
         foreach ($contain as $table) {
-            if ( !key_exists($table, $this->_joins) ) {
-                throw new DataBaseServiceException(sprintf('La asociación (%s) no fue configurada en la tabla', $table));
-            }
-            $data = $this->_joins[$table];
-            switch ($data['mode']) {
-                case 'hasOne':
-                    $table_singular = strtolower(Inflector::singularize($table));
-                    $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($this->_table_name));
-                    $join_field = $data['join_field'] ? $data['join_field'] : 'id';
-                    foreach ($results as $key => $result) {
-                        $new_results[$key][$table_singular] = 
-                                $this->_model->select('all')->from($table)->where([$field => $result[$join_field]])->first()->toArray();
+            foreach ($results as $key => $result) {
+                if ( !key_exists($table, $this->_joins) ) {
+                    throw new \InvalidArgumentException(sprintf('La asociación (%s) no fue configurada en la tabla', $table));
+                }
+                
+                //Verifico si son multiples resultados o solo uno
+                if ($this->_joins[$table]['mode'] == 'hasMany' || $this->_joins[$table]['mode'] == 'beongsToMany' ) {
+                    $table_link = $table;
+                } else {
+                    $table_link = strtolower(Inflector::singularize($table));
+                }
+                
+                if ( is_object($result) ) {
+                    $assoc_result = NULL;
+                    
+                    $class_name = 'App\Model\Tables\\' . Inflector::classify($table);
+                    if ( !class_exists($class_name) ) {
+                        throw new \InvalidArgumentException(sprintf('La clase (%s) no existe', $class_name));
                     }
-                    break;
-                case 'hasMany':
-                    $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($this->_table_name));
-                    $join_field = $data['join_field'] ? $data['join_field'] : 'id';
-                    foreach ($results as $key => $result) {
-                        $new_results[$key][$table] =
-                                $this->_model->select('all')->from($table)->where([$field => $result[$join_field]])->all()->toArray();
+
+                    /* @var $table_assoc Table */
+                    $table_assoc = new $class_name( $this->_model );
+                    $association = $this->getAssociationData($table, (array)$result);
+                    
+                    //Si son multiples resultados
+                    if ( $table_link == $table ) {
+                        $assoc_result = [];
+                        foreach ($association as $assoc) {
+                            $assoc_result[$assoc['id']] = $table_assoc->get($assoc['id']);
+                        }
+                        
+                    } else if ($association) {
+                        $assoc_result = $table_assoc->get($association['id']);
                     }
-                    break;
-                case 'belongsTo':
-                    $table_singular = strtolower(Inflector::singularize($table));
-                    $field = $data['field'] ? $data['field'] : 'id_' . $table_singular;
-                    $join_field = $data['join_field'] ? $data['join_field'] : 'id';
-                    foreach ($results as $key => $result) {
-                        $new_results[$key][$table_singular] = $result[$field] ? 
-                                $this->_model->select('all')->from($table)->where([$join_field => $result[$field]])->first()->toArray() : [];
-                    }
-                    break;
-                default:
-                    break;
+
+                    $new_results[$key]->{ $table_link } = $assoc_result;
+                } else {
+                    $new_results[$key][$table_link] = $this->getAssociationData($table, $result);
+                }
             }
         }
+        
         return $new_results;
+    }
+
+    /**
+     * Devuelve los datos de una asociacion configurada
+     * @param string $table Nombre de la tabla asociada
+     * @param array $result Datos de la tabla que asocia
+     * @return array Un array con los datos de la tabla asociada
+     * @throws \InvalidArgumentException
+     */
+    private function getAssociationData($table, array $result) {
+        $return = NULL;
+        if ( !key_exists($table, $this->_joins) ) {
+            throw new \InvalidArgumentException(sprintf('La asociación (%s) no fue configurada en la tabla', $table));
+        }
+        $data = $this->_joins[$table];
+        switch ($data['mode']) {
+            case 'hasOne':
+                $join_field = $data['join_field'] ? $data['join_field'] : 'id';
+                if ( !key_exists($join_field, $result) ) {
+                    throw new \InvalidArgumentException(
+                            sprintf('No existe el campo (%s) en los resultados de la tabla (%s)', $join_field, $table));
+                }
+                $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($this->_table_name));
+                                
+                $return = $this->_model->select('all')->from($table)->where([$field => $result[$join_field]])->first()->toArray();
+                break;
+                
+            case 'hasMany':
+                $join_field = $data['join_field'] ? $data['join_field'] : 'id';
+                if ( !key_exists($join_field, $result) ) {
+                    throw new \InvalidArgumentException(
+                            sprintf('No existe el campo (%s) en los resultados de la tabla (%s)', $join_field, $table));
+                }
+                $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($this->_table_name));
+                
+                $return = $this->_model->select('all')->from($table)->where([$field => $result[$join_field]])->all()->toArray();
+                break;
+                
+            case 'belongsTo':
+                $field = $data['field'] ? $data['field'] : 'id_' . strtolower(Inflector::singularize($table));
+                if ( !key_exists($field, $result) ) {
+                    throw new \InvalidArgumentException(
+                            sprintf('No existe el campo (%s) en los resultados de la tabla (%s)', $field, $this->_table_name));
+                }
+                $join_field = $data['join_field'] ? $data['join_field'] : 'id';
+                
+                $return = $result[$field] ? 
+                        $this->_model->select('all')->from($table)->where([$join_field => $result[$field]])->first()->toArray() : [];
+                break;
+        }
+        
+        return $return;
     }
 }

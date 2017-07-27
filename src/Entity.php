@@ -52,8 +52,7 @@ class Entity {
             $this->_data = $data;
             foreach ($data as $name => $value) {
                 if ( property_exists($this, $name) ) {
-                    $this->{ $name } = is_array($this->{ $name }) ? 
-                    (json_decode($value) ? json_decode($value, TRUE) : []) : $value;
+                    $this->{ $name } = $value;
                 }
             }
         }
