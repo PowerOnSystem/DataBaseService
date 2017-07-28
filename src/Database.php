@@ -87,7 +87,19 @@ class Database {
         return $this->_table_registry[$table_request];
     }
     
+    /**
+     * Devuelve el modelo de la base de datos
+     * @return Model
+     */
     public function model() {
         return $this->_model;
+    }
+    
+    /**
+     * Devuelve el servicio PDO de la base de datos
+     * @return \PDO
+     */
+    public function service() {
+        return $this->_service;
     }
 }

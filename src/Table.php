@@ -168,7 +168,7 @@ class Table {
         
         $results = $this->{ $method_mode } ( $args );
 
-        if ($config['contain']) {
+        if ($results && $config['contain']) {
             $results = $this->processAssociation(is_array($config['contain']) ? $config['contain'] : [$config['contain']], $results);
         }
         
@@ -417,11 +417,17 @@ class Table {
      * @throws DataBaseServiceException
      */
     private function processAssociation(array $contain, array $results) {
+        $multi = TRUE;
+        if ( !is_array(reset($results)) ) {
+            $results = [$results];
+            $multi = FALSE;
+        }
         $new_results = $results;
         foreach ($contain as $table) {
             foreach ($results as $key => $result) {
                 if ( !key_exists($table, $this->_joins) ) {
-                    throw new \InvalidArgumentException(sprintf('La asociación (%s) no fue configurada en la tabla', $table));
+                    throw new \InvalidArgumentException(sprintf('La asociación (%s) no fue configurada en la tabla (%s)', $table
+                            , $this->_table_name));
                 }
                 
                 //Verifico si son multiples resultados o solo uno
@@ -461,7 +467,7 @@ class Table {
             }
         }
         
-        return $new_results;
+        return $multi ? $new_results : reset($new_results);
     }
 
     /**
