@@ -78,7 +78,7 @@ class Model {
      * 
      * @return Query\Select
      */
-    public function select($fields) {
+    public function select($fields = '*') {
         $this->initialize(QueryBuilder::SELECT_QUERY);
         $this->_active_query->fields($fields);
         
@@ -148,7 +148,8 @@ class Model {
      */
     public function from($table) {
         if ( $this->_active_query->getType() != QueryBuilder::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
+            throw new DataBaseServiceException(
+                    sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
         }
         $this->_active_query->table($table);
         return $this;
@@ -161,7 +162,8 @@ class Model {
      */
     public function set(array $data) {
         if ( $this->_active_query->getType() != QueryBuilder::UPDATE_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::UPDATE_QUERY));
+            throw new DataBaseServiceException(
+                    sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::UPDATE_QUERY));
         }
         $this->_active_query->values($data);
         
@@ -175,7 +177,8 @@ class Model {
      */
     public function values(array $data) {
         if ( $this->_active_query->getType() != QueryBuilder::INSERT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::INSERT_QUERY));
+            throw new DataBaseServiceException(
+                    sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::INSERT_QUERY));
         }
         $this->_active_query->fields(array_keys($data));
         $this->_active_query->values($data);
@@ -194,10 +197,10 @@ class Model {
      *      <td><b>Básico</b></td><td><code>$cond = ['id' => 2]; </code></td><td><i>WHERE `id` = 2</i></td>
      *  </tr>
      *  <tr>
-     *      <td><b>Operador</td><td><code>$cond = ['id' => ['>=', 5]]; </code></td><td><i>WHERE `id` >= 5</i></td>
+     *      <td><b>Operador</td><td><code>$cond = ['id >=' => 5]; </code></td><td><i>WHERE `id` >= 5</i></td>
      *  </tr>
      *  <tr>
-     *      <td><b>AND</td><td><code>$cond = ['year' => ['>=', 2010], 'title' => ['LIKE', 's%']]; </code></td>
+     *      <td><b>AND</td><td><code>$cond = ['year >=' 2010, 'title LIKE' => 's%']; </code></td>
      *      <td><i>WHERE `year` >= 2010 AND `title` LIKE 's%'</i></td>
      *  </tr>
      *  <tr>
@@ -205,18 +208,16 @@ class Model {
      *      <td><i>WHERE `id` = 5 OR `year` = 2017 AND (`title` = "foo" OR "title" = "bar")</i></td>
      *  </tr>
      * <tr>
-     *      <td><b>Specific Table</td><td><code>$cond = ['authors' => ['movies' => ['>=', 3]]]; </code></td>
+     *      <td><b>Specific Table</td><td><code>$cond = ['authors' => ['movies >=' => 3]]; </code></td>
      *      <td><i>WHERE `authors`.`movies` >= 3</i></td>
      *  </tr>
      * </table>
      * </pre>
-     * @param array $conditions Ej: ['field' => 'value, 'OR', 'table' => 
-     * ['type' => 'client', 'AND', 'type' => 'provider'], 'field' => ['value1', 'value2'] ]
+     * @param array $conditions
      * @return \PowerOn\Database\Model
      */
     public function where(array $conditions) {
         $this->_active_query->conditions($conditions);
-
         return $this;
     }
         
@@ -309,8 +310,9 @@ class Model {
      */
     public function first() {
         $this->limit(1);
+
         $query = $this->query( $this->_active_query->getQuery(), $this->_active_query->getParams() );
-        return new QueryResult($query, TRUE);
+        return (new QueryResult($query, TRUE))->toArray();
     }
     
     /**

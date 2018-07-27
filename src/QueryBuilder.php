@@ -89,6 +89,7 @@ class QueryBuilder {
     const INSERT_QUERY = 'insert';
        
     const OPERATOR_TYPES = ['LIKE', '=', '!=', '<', '>', '<=', '>=', 'NOT', 'NOT LIKE', 'JSON', 'REGEXP'];
+    const CONDITIONAL_TYPES = ['AND', 'OR', 'AND NOT', 'OR NOT', 'NOT'];
     
     /**
      * Crea una nueva consulta
@@ -209,7 +210,7 @@ class QueryBuilder {
     }
     
     public function debug() {
-        return $this->_query;
+        return ['query' => $this->_query, 'params' => $this->getParams()];
     }
     
     /**
@@ -312,7 +313,7 @@ class QueryBuilder {
                 foreach ($this->_tables as $joined_table) {
                     $new_fields[] = '`' . $joined_table . '`.*';
                 }
-            } else if ( $function = $this->checkFunction($field) ) {
+            } else if ( is_string($field) && $function = $this->checkFunction($field) ) {
                 $new_fields[] = $function;
             } else {
                 if ( is_array($field) ) {
@@ -365,26 +366,24 @@ class QueryBuilder {
      * @return string
      */
     private function processJoin() {
-        $join_types = ['INNER', 'LEFT', 'RIGHT', 'LEFT OUTER', 'RIGHT OUTER'];
-        $all_joins = '';
+        $joins = '';
 
-        foreach ($this->_joins as $key => $value) {
-            $p = '';
-            $tb = $key;
-            $s = explode('AS', $key);
-            if ( count($s) > 1 ) {
-                $key = trim($s[1]);
-                $tb = trim($s[0]);
-                $p = ' ' . $s[1] . '';
+        foreach ($this->_joins as $table => $value) {
+            $config = [
+                'table' => NULL,
+                'type' => 'LEFT',
+                'conditions' => NULL
+            ] + $value;
+            if (!array_intersect(array_keys($value), ['table', 'type', 'conditions'])) {
+                $config['conditions'] = $value;
             }
-            $cfg = reset($value);
-            $all_joins .= ' ' . (key_exists(3, $cfg) && in_array($cfg[3], $join_types) ? $cfg[3] : 'LEFT') . ' JOIN `' 
-                    . $tb . '` ' . $p . ' ON `' . $key . '`.`' . key($value) . '` ' 
-                    . (key_exists(2, $cfg) && in_array($cfg[2], self::OPERATOR_TYPES) ? $cfg[2] : '=') . ' `' 
-                    . (key_exists(1, $cfg) ? $cfg[1] : $this->_table) . '`.`' . $cfg[0] . '`';
+            $joins .= ' ' . $config['type'] . ' JOIN ' 
+                    . '`' . ($config['table'] ?: $table) . '` ' 
+                    . ($config['table'] ? $table : '') . ' ON ' 
+                    . $this->parseCondition($config['conditions'], NULL, 'AND', FALSE, FALSE);
         }
         
-        return $all_joins;
+        return $joins;
     }
     
     /**
@@ -409,62 +408,73 @@ class QueryBuilder {
      * Procesa una lista de condiciones en array
      * @param array $conditions Las condiciones
      * @param string $table Nombre de la tabla inicial
-     * @param string $initial_operator Operador Inicial
-     * @param string $force_key Clave forzada
+     * @param string $initialOperator Operador Inicial
+     * @param string $forceKey Clave forzada
      * @return string La consulta procesada compelta
      */
-    private function parseCondition(array $conditions, $table = NULL, $initial_operator = NULL, $force_key = NULL) {
-        $at = ['AND', 'OR', 'AND NOT', 'OR NOT', 'NOT'];
+    private function parseCondition(array $conditions, $table = NULL, $initialOperator = NULL, $forceKey = NULL, $prepare = TRUE) {
         $cond = '';
         $op = '';
         foreach ($conditions as $key => $value) {
-            if ($value === NULL) {
+            if (!is_array($value) && !$value) {
                 continue;
             }
-            if (is_array($value) && !$value ) {
-                $value = 'NULL';
-            }
-            if ( is_string($value) && in_array($value, $at) ) {
+
+            if ( is_string($value) && in_array($value, self::CONDITIONAL_TYPES) ) {
                 $op = $value;
                 continue;
             }
-
-            if ( in_array($key, $this->_tables) && is_array($value) ) {
-                $cond .= ' ' . $op . ' (' . $this->processCondition($value, $key) . ')';
-            } else if ( is_array($value) && is_array(reset($value)) ) {
-                $cond .= ' ' . $op . ' (';
-                $op2 = '';
-                foreach ($value as $v) {
-                    $cond .= ' ' . $op2 . ' ' . $this->processCondition([$key => $v], NULL, 'OR', $key);
-                    if ( is_string($v) && in_array($v, $at) ) {
-                        $op2 = $v;
-                    } else {
-                        $op2 = 'OR';
-                    }
-                }
-                $cond .= ')';
-            } else if ( is_array($value) && !in_array(reset($value), self::OPERATOR_TYPES, TRUE) ) {
-                $cond .= ' ' . $op . ' (' . $this->processCondition($value, NULL, 'OR', $key) . ')';
+            
+            $isTable = in_array($key, $this->_tables) ? $key : NULL;
+            
+            if ( is_array($value) ) {
+                $cond .= ' ' . $op . ' (' . $this->parseCondition($value, $isTable, $isTable ? NULL : 'OR', $isTable ? NULL : $key) . ')';
             } else {
-                $field = ($force_key ? $force_key : $key);
-                $cond_field = 'cnd_' . $field;
-                $this->_condition_fields[$cond_field] = addslashes(trim((!is_array($value) ? $value : $value[1])));
-                $cond .= ' ' . $op . ' ' . ($table ? '`' . $table . '`.' : '') . '`' 
-                        . $field . '` ' 
-                        . ( !is_array($value) || (!in_array($value[0], self::OPERATOR_TYPES)) ? '=' : $value[0]) 
-                        . ' :' . $cond_field;
-                /*
-                $value_process = addslashes(trim((!is_array($value) ? $value : $value[1])));
+                $rfield = $forceKey ? $forceKey : $key;
                 
-                $cond .= ' ' . $op . ' ' . ($table ? '`' . $table . '`.' : '') . '`' 
-                        . ($force_key ? $force_key : $key) . '` ' 
-                        . ( !is_array($value) || (!in_array($value[0], self::OPERATOR_TYPES)) ? '=' : $value[0]) 
-                        . ' "' . $value_process . '" ';
-                */
+                list ($operator, $field, $fieldTable) = $this->parseField($rfield);
+                
+                if ($prepare) {
+                    $cond_field = 'cnd_' . ($fieldTable ? $fieldTable . '_'  : '') . $field . (is_numeric($key) ? $key : '');
+
+                    $this->_condition_fields[$cond_field] = addslashes(trim($value));
+                } else {
+                    list(,$valueField, $valueFieldTable) = $this->parseField($value);
+                }
+                
+                $cond .= ' ' . $op . ' ' . ($table ? '`' . $table . '`.' : '') 
+                        . ($fieldTable ? '`' . $fieldTable . '`.' : '') 
+                        . '`' . $field . '` ' 
+                        . $operator . ' '
+                        . ($prepare 
+                            ? ':' . $cond_field 
+                            : ($valueFieldTable ? '`' . $valueFieldTable . '`.' : '') . '`' . $valueField . '` ' 
+                        );
             }
-            $op = !$op ? ($initial_operator ? $initial_operator : 'AND') : $op;
+            $op = $op ?: ($initialOperator ? $initialOperator : 'AND');
         }
 
         return $cond;
+    }
+    /**
+     * Devuelve la tabla el operador y el campo encontrado en el field
+     * @param string $field
+     * @return array
+     */
+    private function parseField($field) {
+        $operator = '=';
+        foreach (self::OPERATOR_TYPES as $find) {
+            if (strpos($field, $find)) {
+                $operator = $find;
+                break;
+            }
+        }
+        $findField = substr($field, 0, strpos($field, ' ') ?: strlen($field));
+        $findTable = explode('.', $field);
+        return [
+            $operator, 
+            count($findTable) > 1 ? $findTable[1] : $findField,
+            key_exists(1, $findTable) ? $findTable[0] : NULL,
+        ];
     }
 }

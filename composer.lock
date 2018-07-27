@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "895145a8408c777016acfe12a2f98791",
+    "content-hash": "f372bc26859c8cd3ce21cf10d90ef4cb",
     "packages": [
         {
-            "name": "poweronsystem/utility",
-            "version": "dev-master",
+            "name": "poweronsystem/webutility",
+            "version": "v0.1.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/PowerOnSystem/Utility.git",
-                "reference": "e659d17a6abf396ea7a56c326ab1962085684eb2"
+                "url": "https://github.com/PowerOnSystem/WebUtility.git",
+                "reference": "d9981d801bb0b25e34fd5225472e7fc2caeab1b6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PowerOnSystem/Utility/zipball/e659d17a6abf396ea7a56c326ab1962085684eb2",
-                "reference": "e659d17a6abf396ea7a56c326ab1962085684eb2",
+                "url": "https://api.github.com/repos/PowerOnSystem/WebUtility/zipball/d9981d801bb0b25e34fd5225472e7fc2caeab1b6",
+                "reference": "d9981d801bb0b25e34fd5225472e7fc2caeab1b6",
                 "shasum": ""
             },
             "require": {
@@ -45,29 +45,29 @@
                 }
             ],
             "description": "Utilities for php programmers.",
-            "homepage": "https://github.com/poweronsystem/utility",
+            "homepage": "https://github.com/poweronsystem/webutility",
             "keywords": [
                 "array hash",
                 "inflector",
                 "string formatter",
                 "utilities"
             ],
-            "time": "2017-07-07 18:50:23"
+            "time": "2017-07-20T12:18:18+00:00"
         }
     ],
     "packages-dev": [
         {
             "name": "kint-php/kint",
-            "version": "2.1.2",
+            "version": "2.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/kint-php/kint.git",
-                "reference": "1a1104729f10277b06d7db742d3c98d1881d4d7e"
+                "reference": "b091715eadaf6e1a7ef927f3e81d1004611d2aea"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/kint-php/kint/zipball/1a1104729f10277b06d7db742d3c98d1881d4d7e",
-                "reference": "1a1104729f10277b06d7db742d3c98d1881d4d7e",
+                "url": "https://api.github.com/repos/kint-php/kint/zipball/b091715eadaf6e1a7ef927f3e81d1004611d2aea",
+                "reference": "b091715eadaf6e1a7ef927f3e81d1004611d2aea",
                 "shasum": ""
             },
             "require": {
@@ -112,14 +112,12 @@
                 "kint",
                 "php"
             ],
-            "time": "2017-07-03T20:08:05+00:00"
+            "time": "2017-09-06T17:46:03+00:00"
         }
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "poweronsystem/utility": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": [],
