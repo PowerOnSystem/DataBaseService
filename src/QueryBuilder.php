@@ -30,58 +30,58 @@ class QueryBuilder {
      * Nombre de la tabla principal
      * @var string
      */
-    private $_table = NULL;
+    private $table = NULL;
     /**
      * Tipo de acción realizada
      * [insert, update, select, delete]
      * @var string
      */
-    private $_type = NULL;
+    private $type = NULL;
     /**
      * Array con las tablas de la consulta
      * @var array
      */
-    private $_tables = [];
+    private $tables = [];
     /**
      * Campos a seleccionar de la consulta
      * @var array
      */
-    private $_fields = [];
+    private $fields = [];
     /**
      * Condiciones de la consulta
      * @var array
      */
-    private $_conditions = [];
+    private $conditions = [];
     /**
      * Campos de la condición
      * @var array
      */
-    private $_condition_fields = [];
+    private $condition_fields = [];
     /**
      * Tablas a incluir en la consulta
      * @var array
      */
-    private $_joins = [];
+    private $joins = [];
     /**
      * Limit de consulta [inicio, limite] o [limite]
      * @var array
      */
-    private $_limit = [];
+    private $limit = [];
     /**
      * Valores a procesar en consulta
      * @var array
      */
-    private $_values = [];
+    private $values = [];
     /**
      * Order de la consulta
      * @var array
      */
-    private $_order = [];
+    private $order = [];
     /**
      * Consulta generada
      * @var string 
      */
-    private $_query = NULL;    
+    private $query = NULL;    
     
     const SELECT_QUERY = 'select';
     const UPDATE_QUERY = 'update';
@@ -96,7 +96,7 @@ class QueryBuilder {
      * @param string $type Tipo de consulta
      */
     public function __construct($type) {
-        $this->_type = $type;
+        $this->type = $type;
     }
     
     /**
@@ -104,7 +104,7 @@ class QueryBuilder {
      * @param string $table
      */
     public function table($table) {
-        $this->_table = $table;
+        $this->table = $table;
     }
     
     /**
@@ -113,11 +113,11 @@ class QueryBuilder {
      * @throws DataBaseServiceException
      */
     public function fields($fields) {
-        if ($this->_type == self::DELETE_QUERY) {
+        if ($this->type == self::DELETE_QUERY) {
             throw new DataBaseServiceException(sprintf('Esta funci&oacute;n no admite el tipo de consulta (%s)', self::DELETE_QUERY));
         }
         $field = is_array($fields) ? $fields : ($fields != '*' && $fields != 'all' ? [$fields] : ['*']);
-        $this->_fields = $field + $this->_fields;
+        $this->fields = $field + $this->fields;
     }
     
     /**
@@ -126,11 +126,11 @@ class QueryBuilder {
      * @throws DataBaseServiceException
      */
     public function values(array $values) {
-        if ($this->_type == self::SELECT_QUERY || $this->_type == self::DELETE_QUERY) {
+        if ($this->type == self::SELECT_QUERY || $this->type == self::DELETE_QUERY) {
             throw new DataBaseServiceException(sprintf('Esta funci&oacute;n no admite el tipo de consulta (%s) ni (%s)',
                     self::SELECT_QUERY, self::DELETE_QUERY));
         }
-        $this->_values += $values;
+        $this->values += $values;
     }
     
     /**
@@ -138,7 +138,7 @@ class QueryBuilder {
      * @param array $conditions Condiciones
      */
     public function conditions(array $conditions) {
-        $this->_conditions += $conditions;
+        $this->conditions += $conditions;
     }
     
     /**
@@ -146,7 +146,7 @@ class QueryBuilder {
      * @param array $order Array estableciendo el orden
      */
     public function order(array $order) {
-        $this->_order += $order;
+        $this->order += $order;
     }
     
     /**
@@ -154,7 +154,7 @@ class QueryBuilder {
      * @param array $limit Array con los limites de la tabla [inicio, limite] o [limite]
      */
     public function limit( array $limit ) {
-        $this->_limit = $limit;
+        $this->limit = $limit;
     }
         
     /**
@@ -163,12 +163,12 @@ class QueryBuilder {
      * @throws DataBaseServiceException
      */
     public function join(array $joins) {
-        if ( $this->_type != self::SELECT_QUERY ) {
+        if ( $this->type != self::SELECT_QUERY ) {
             throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
         }
         
-        $this->_joins += $joins;
-        $this->_tables += array_keys($joins);
+        $this->joins += $joins;
+        $this->tables += array_keys($joins);
     }
     
     /**
@@ -176,21 +176,21 @@ class QueryBuilder {
      * @return string
      */
     public function getQuery() {
-        switch ($this->_type) {
-            case self::INSERT_QUERY: $this->_query = $this->buildInsertQuery(); break;
-            case self::UPDATE_QUERY: $this->_query = $this->buildUpdateQuery(); break;
-            case self::DELETE_QUERY: $this->_query = $this->buildDeleteQuery(); break;
-            case self::SELECT_QUERY: $this->_query = $this->buildSelectQuery(); break;
+        switch ($this->type) {
+            case self::INSERT_QUERY: $this->query = $this->buildInsertQuery(); break;
+            case self::UPDATE_QUERY: $this->query = $this->buildUpdateQuery(); break;
+            case self::DELETE_QUERY: $this->query = $this->buildDeleteQuery(); break;
+            case self::SELECT_QUERY: $this->query = $this->buildSelectQuery(); break;
         }
 
-        return $this->_query;
+        return $this->query;
     }
     /**
      * Devuelve los valores de la consulta <b>update</b> o <b>insert</b>
      * @return array
      */
     public function getValues() {
-        return $this->_values;
+        return $this->values;
     }
     
     /**
@@ -198,7 +198,7 @@ class QueryBuilder {
      * @return array
      */
     public function getParams() {
-        return ($this->_values + $this->_condition_fields);
+        return ($this->values + $this->condition_fields);
     }
     
     /**
@@ -206,11 +206,11 @@ class QueryBuilder {
      * @return string
      */
     public function getType() {
-        return $this->_type;
+        return $this->type;
     }
     
     public function debug() {
-        return ['query' => $this->_query, 'params' => $this->getParams()];
+        return ['query' => $this->query, 'params' => $this->getParams()];
     }
     
     /**
@@ -219,12 +219,12 @@ class QueryBuilder {
      */
     private function buildSelectQuery() {
         return 'SELECT ' 
-            . ($this->_fields ? $this->processFields() : '*') 
-            . ' FROM ' . $this->_table
-            . ($this->_joins ? $this->processJoin() : NULL)
-            . ($this->_conditions ? $this->processCondition() : NULL )
-            . ($this->_order ? $this->processOrder() : NULL)
-            . ($this->_limit ? $this->processLimit() : NULL);
+            . ($this->fields ? $this->processFields() : '*') 
+            . ' FROM ' . $this->table
+            . ($this->joins ? $this->processJoin() : NULL)
+            . ($this->conditions ? $this->processCondition() : NULL )
+            . ($this->order ? $this->processOrder() : NULL)
+            . ($this->limit ? $this->processLimit() : NULL);
         
         
     }
@@ -234,9 +234,9 @@ class QueryBuilder {
      * @return integer Devuelve el número de filas afectadas
      */
     private function buildUpdateQuery() {
-        return 'UPDATE ' . $this->_table . ' SET ' 
+        return 'UPDATE ' . $this->table . ' SET ' 
             . $this->processUpdateValues() 
-            . ($this->_conditions ? $this->processCondition() : NULL );
+            . ($this->conditions ? $this->processCondition() : NULL );
     }
     
     /**
@@ -244,7 +244,7 @@ class QueryBuilder {
      * @return integer Devuelve el ID de la fila insertada
      */
     private function buildInsertQuery() {
-        return 'INSERT INTO ' . $this->_table . ' (' 
+        return 'INSERT INTO ' . $this->table . ' (' 
             . $this->processFields() . ') VALUES (' 
             . $this->processInsertValues() . ')'
         ;
@@ -255,12 +255,12 @@ class QueryBuilder {
      * @return integer Devuelve el número de filas eliminadas
      */
     private function buildDeleteQuery() {
-        if ( empty($this->_conditions) ) {
+        if ( empty($this->conditions) ) {
             throw new DataBaseServiceException('Atenci&oacute;n, esta funci&oacute;n eliminar&aacute; todo el contenido de la tabla, '
                     . 'esta acci&oacute;n debe realizarse a trav&eacute;s del administrador '
                     . 'de su base de datos con la funci&oacute;n TRUNCATE');
         }
-        return 'DELETE FROM ' . $this->_table . $this->processCondition();
+        return 'DELETE FROM ' . $this->table . $this->processCondition();
     }
     
     /**
@@ -284,7 +284,7 @@ class QueryBuilder {
     private function processInsertValues() {
         $new_values = array_map(function($key) {
             return ':' . $key;
-        }, array_keys($this->_values));
+        }, array_keys($this->values));
         
         return implode(', ', $new_values);
     }
@@ -296,7 +296,7 @@ class QueryBuilder {
     private function processUpdateValues() {
         $changes = array_map(function($key){
             return ' `' . $key . '` = :' . $key;
-        }, array_keys($this->_values));
+        }, array_keys($this->values));
         
         return implode(', ', $changes);
     }
@@ -307,10 +307,10 @@ class QueryBuilder {
      */
     private function processFields() {
         $new_fields = [];
-        foreach ( $this->_fields as $table => $field ) {
-            if ($field == '*' && count($this->_fields) == 1 && $this->_tables) {
-                $new_fields[] = '`' . $this->_table . '`.*';
-                foreach ($this->_tables as $joined_table) {
+        foreach ( $this->fields as $table => $field ) {
+            if ($field == '*' && count($this->fields) == 1 && $this->tables) {
+                $new_fields[] = '`' . $this->table . '`.*';
+                foreach ($this->tables as $joined_table) {
                     $new_fields[] = '`' . $joined_table . '`.*';
                 }
             } else if ( is_string($field) && $function = $this->checkFunction($field) ) {
@@ -323,9 +323,9 @@ class QueryBuilder {
                     }
                     $new_fields[] = implode(',', $new_sub_fields);
                 } else {
-                    $new_fields[] = $field == '*' && !in_array($table, $this->_tables) 
-                        ? '`' . $this->_table . '`.*' : (
-                            (is_string($table) && in_array($table, $this->_tables) ? '`' . $table . '`.' : '') 
+                    $new_fields[] = $field == '*' && !in_array($table, $this->tables) 
+                        ? '`' . $this->table . '`.*' : (
+                            (is_string($table) && in_array($table, $this->tables) ? '`' . $table . '`.' : '') 
                             . ($field == '*' ? '*' : '`' . $field . '`' . ( !is_numeric($table) ? ' AS `' . $table . '`' : '') )
                         );
                 }
@@ -342,7 +342,7 @@ class QueryBuilder {
      */
     private function processOrder() {
         $sorts = [];
-        foreach ( $this->_order as $sort_mode => $sort_by ) {
+        foreach ( $this->order as $sort_mode => $sort_by ) {
             if ( !is_array($sort_by) ) {
                 $sort_by = [$sort_by];
             }
@@ -358,7 +358,7 @@ class QueryBuilder {
      * @return string
      */
     private function processCondition() {
-        return ' WHERE ' . $this->parseCondition($this->_conditions, $this->_joins ? $this->_table : NULL);
+        return ' WHERE ' . $this->parseCondition($this->conditions, $this->joins ? $this->table : NULL);
     }
     
     /**
@@ -368,7 +368,7 @@ class QueryBuilder {
     private function processJoin() {
         $joins = '';
 
-        foreach ($this->_joins as $table => $value) {
+        foreach ($this->joins as $table => $value) {
             $config = [
                 'table' => NULL,
                 'type' => 'LEFT',
@@ -392,16 +392,16 @@ class QueryBuilder {
      * @return string
      */
     private function processLimit() {
-        if ( empty($this->_limit) ) {
+        if ( empty($this->limit) ) {
             return FALSE;
         }
         
-        if ( !key_exists(0, $this->_limit) ) {
+        if ( !key_exists(0, $this->limit) ) {
             throw new DataBaseServiceException('El limit de la consulta esta mal configurado, '
-                    . 'asegurese que sea un array simple [start, limit] o [limit]', ['limit' => $this->_limit]);
+                    . 'asegurese que sea un array simple [start, limit] o [limit]', ['limit' => $this->limit]);
         }
         
-        return ' LIMIT ' . (int)$this->_limit[0] . ($this->_limit[1] ? ', ' . (int)$this->_limit[1] : '');
+        return ' LIMIT ' . (int)$this->limit[0] . ($this->limit[1] ? ', ' . (int)$this->limit[1] : '');
     }
     
     /**
@@ -425,7 +425,7 @@ class QueryBuilder {
                 continue;
             }
             
-            $isTable = in_array($key, $this->_tables) ? $key : NULL;
+            $isTable = in_array($key, $this->tables) ? $key : NULL;
             
             if ( is_array($value) ) {
                 $cond .= ' ' . $op . ' (' . $this->parseCondition($value, $isTable, $isTable ? NULL : 'OR', $isTable ? NULL : $key) . ')';
@@ -437,12 +437,12 @@ class QueryBuilder {
                 if ($prepare) {
                     $cond_field = 'cnd_' . ($fieldTable ? $fieldTable . '_'  : '') . $field . (is_numeric($key) ? $key : '');
 
-                    $this->_condition_fields[$cond_field] = addslashes(trim($value));
+                    $this->condition_fields[$cond_field] = addslashes(trim($value));
                 } else {
                     list(,$valueField, $valueFieldTable) = $this->parseField($value);
                 }
                 
-                $cond .= ' ' . $op . ' ' . ($table ? '`' . $table . '`.' : '') 
+                $cond .= ' ' . $op . ' ' . ($table && !$fieldTable ? '`' . $table . '`.' : '') 
                         . ($fieldTable ? '`' . $fieldTable . '`.' : '') 
                         . '`' . $field . '` ' 
                         . $operator . ' '
