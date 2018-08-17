@@ -81,14 +81,24 @@ class QueryBuilder {
      * Consulta generada
      * @var string 
      */
-    private $query = NULL;    
+    private $query = NULL;
+    /**
+     * Tablas incluidas en array independiente de resultado unico
+     * @var array
+     */
+    private $contains_one = [];
+    /**
+     * Tablas incluidas en array independiente de múltiples resultados
+     * @var array
+     */
+    private $contains_many = [];
     
     const SELECT_QUERY = 'select';
     const UPDATE_QUERY = 'update';
     const DELETE_QUERY = 'delete';
     const INSERT_QUERY = 'insert';
        
-    const OPERATOR_TYPES = ['LIKE', '=', '!=', '<', '>', '<=', '>=', 'NOT', 'NOT LIKE', 'JSON', 'REGEXP'];
+    const OPERATOR_TYPES = ['LIKE', '=', '!=', '<', '>', '<=', '>=', 'NOT', 'NOT LIKE', 'JSON', 'REGEXP', 'IS', 'IN'];
     const CONDITIONAL_TYPES = ['AND', 'OR', 'AND NOT', 'OR NOT', 'NOT'];
     
     /**
@@ -168,7 +178,45 @@ class QueryBuilder {
         }
         
         $this->joins += $joins;
-        $this->tables += array_keys($joins);
+        $this->tables = array_merge($this->tables, array_keys($joins));
+    }
+    
+    /**
+     * Asocia tablas a una consutla de tipo <b>select</b>
+     * @param array $contain Array con las asociaciones
+     * @throws DataBaseServiceException
+     */
+    public function containOne($contain) {
+        if ( $this->type != self::SELECT_QUERY ) {
+            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
+        }
+        
+        $this->contains_one += $contain;
+        $this->tables += array_keys($contain);
+    }
+    
+    public function containMany($contain) {
+        if ( $this->type != self::SELECT_QUERY ) {
+            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
+        }
+        
+        $this->contains_many += $contain;
+    }
+    
+    /**
+     * Devuelve los contains one
+     * @return array
+     */
+    public function getContainsOne() {
+        return $this->contains_one;
+    }
+    
+    /**
+     * Devuelve los contains many
+     * @return array
+     */
+    public function getContainMany() {
+        return $this->contains_many;
     }
     
     /**
@@ -308,10 +356,12 @@ class QueryBuilder {
     private function processFields() {
         $new_fields = [];
         foreach ( $this->fields as $table => $field ) {
-            if ($field == '*' && count($this->fields) == 1 && $this->tables) {
+            if ($field == '*') {
                 $new_fields[] = '`' . $this->table . '`.*';
-                foreach ($this->tables as $joined_table) {
-                    $new_fields[] = '`' . $joined_table . '`.*';
+                if (count($this->fields) == 1 && $this->tables) {
+                    foreach ($this->tables as $joined_table) {
+                        $new_fields[] = '`' . $joined_table . '`.*';
+                    }
                 }
             } else if ( is_string($field) && $function = $this->checkFunction($field) ) {
                 $new_fields[] = $function;
@@ -324,7 +374,8 @@ class QueryBuilder {
                     $new_fields[] = implode(',', $new_sub_fields);
                 } else {
                     $new_fields[] = $field == '*' && !in_array($table, $this->tables) 
-                        ? '`' . $this->table . '`.*' : (
+                        ? '`' . $this->table . '`.*' 
+                        : (
                             (is_string($table) && in_array($table, $this->tables) ? '`' . $table . '`.' : '') 
                             . ($field == '*' ? '*' : '`' . $field . '`' . ( !is_numeric($table) ? ' AS `' . $table . '`' : '') )
                         );
@@ -367,19 +418,18 @@ class QueryBuilder {
      */
     private function processJoin() {
         $joins = '';
-
-        foreach ($this->joins as $table => $value) {
-            $config = [
-                'table' => NULL,
+        foreach ($this->joins as $alias => $value) {
+            $config = $value + [
+                'table' => $alias,
                 'type' => 'LEFT',
                 'conditions' => NULL
-            ] + $value;
+            ];
             if (!array_intersect(array_keys($value), ['table', 'type', 'conditions'])) {
                 $config['conditions'] = $value;
             }
             $joins .= ' ' . $config['type'] . ' JOIN ' 
-                    . '`' . ($config['table'] ?: $table) . '` ' 
-                    . ($config['table'] ? $table : '') . ' ON ' 
+                    . '`' .  $config['table'] . '` ' . ($config['table'] != $alias ? ' AS `' . $alias . '`' : '')
+                    . ' ON ' 
                     . $this->parseCondition($config['conditions'], NULL, 'AND', FALSE, FALSE);
         }
         
@@ -416,8 +466,12 @@ class QueryBuilder {
         $cond = '';
         $op = '';
         foreach ($conditions as $key => $value) {
-            if (!is_array($value) && !$value) {
-                continue;
+            if ($value === TRUE) {
+                $value = '1';
+            } else if ($value === FALSE) {
+                $value = '0';
+            } else if ($value === NULL) {
+                $value = 'NULL';
             }
 
             if ( is_string($value) && in_array($value, self::CONDITIONAL_TYPES) ) {
@@ -426,18 +480,20 @@ class QueryBuilder {
             }
             
             $isTable = in_array($key, $this->tables) ? $key : NULL;
+            $rfield = $forceKey ? $forceKey : $key;
+            list ($operator, $field, $fieldTable) = $this->parseField($rfield);
+            $array = FALSE;
             
-            if ( is_array($value) ) {
+            if ( is_array($value) && $operator !== 'IN' ) {
                 $cond .= ' ' . $op . ' (' . $this->parseCondition($value, $isTable, $isTable ? NULL : 'OR', $isTable ? NULL : $key) . ')';
             } else {
-                $rfield = $forceKey ? $forceKey : $key;
-                
-                list ($operator, $field, $fieldTable) = $this->parseField($rfield);
-                
-                if ($prepare) {
-                    $cond_field = 'cnd_' . ($fieldTable ? $fieldTable . '_'  : '') . $field . (is_numeric($key) ? $key : '');
-
-                    $this->condition_fields[$cond_field] = addslashes(trim($value));
+                if ($value !== 'NULL' && $prepare) {
+                    if ($operator === 'IN' && is_array($value)) {
+                        $array = '(' . implode(', ', $value) . ')';
+                    } else {
+                        $cond_field = 'cnd_' . ($fieldTable ? $fieldTable . '_'  : '') . $field . (is_numeric($key) ? $key : '');
+                        $this->condition_fields[$cond_field] = addslashes(trim($value));
+                    }    
                 } else {
                     list(,$valueField, $valueFieldTable) = $this->parseField($value);
                 }
@@ -446,9 +502,15 @@ class QueryBuilder {
                         . ($fieldTable ? '`' . $fieldTable . '`.' : '') 
                         . '`' . $field . '` ' 
                         . $operator . ' '
-                        . ($prepare 
-                            ? ':' . $cond_field 
-                            : ($valueFieldTable ? '`' . $valueFieldTable . '`.' : '') . '`' . $valueField . '` ' 
+                        . ($value === 'NULL' 
+                            ? $value
+                            : ($array
+                                ? $array
+                                :($prepare 
+                                    ? ':' . $cond_field 
+                                    : ($valueFieldTable ? '`' . $valueFieldTable . '`.' : '') . '`' . $valueField . '` '
+                                )
+                            )
                         );
             }
             $op = $op ?: ($initialOperator ? $initialOperator : 'AND');
@@ -464,8 +526,9 @@ class QueryBuilder {
     private function parseField($field) {
         $operator = '=';
         foreach (self::OPERATOR_TYPES as $find) {
-            if (strpos($field, $find)) {
+            if (preg_match('/ ' . $find . '$/', $field)) {
                 $operator = $find;
+                $field = trim(str_replace($find, '', $field));
                 break;
             }
         }
@@ -476,5 +539,13 @@ class QueryBuilder {
             count($findTable) > 1 ? $findTable[1] : $findField,
             key_exists(1, $findTable) ? $findTable[0] : NULL,
         ];
+    }
+    
+    /**
+     * Devuelve el nombre de la tabla principal
+     * @return string
+     */
+    public function getTableName() {
+        return $this->table;
     }
 }

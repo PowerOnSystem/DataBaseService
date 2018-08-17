@@ -20,6 +20,8 @@
 namespace PowerOn\Database;
 use \PDO;
 use \PDOException;
+use PowerOn\Utility\Inflector;
+
 /**
  * Modelo de base de datos MySql
  * Se puede modificar para utilizar cualquier otro tipo de base de datos
@@ -31,33 +33,34 @@ class Model {
      * Conexión a la base de datos
      * @var PDO 
      */
-    private $_service = NULL;
+    private $service = NULL;
     /**
      * Log de consultas realizadas
      * @var QueryBuilder
      */
-    private $_log_queries = [];
+    private $query_log = [];
     /**
      * Consultas en modo de espera
      * @var QueryBuilder 
      */
-    private $_hold_queries = [];
+    private $query_hold = [];
     /**
      * Consulta activa
      * @var QueryBuilder
      */
-    private $_active_query = NULL;
+    private $query_active = NULL;
     /**
      * Funciones SQL
      * @var Functions
      */
-    private $_functions = NULL;
+    private $functions = NULL;
+    
     /**
      * Crea un objeto modelo para la base de datos
      * @param 
      */
     public function __construct(PDO $service) {
-        $this->_service = $service;
+        $this->service = $service;
     }
     
     const DEBUG_FULL = 0;
@@ -80,7 +83,7 @@ class Model {
      */
     public function select($fields = '*') {
         $this->initialize(QueryBuilder::SELECT_QUERY);
-        $this->_active_query->fields($fields);
+        $this->query_active->fields($fields);
         
         return $this;
     }
@@ -92,7 +95,7 @@ class Model {
      */
     public function update($table) {
         $this->initialize(QueryBuilder::UPDATE_QUERY);
-        $this->_active_query->table($table);
+        $this->query_active->table($table);
         return $this;
     }
     
@@ -103,7 +106,7 @@ class Model {
      */
     public function delete($table) {
         $this->initialize(QueryBuilder::DELETE_QUERY);
-        $this->_active_query->table($table);
+        $this->query_active->table($table);
         return $this;
     }
     
@@ -114,7 +117,7 @@ class Model {
      */
     public function insert($table) {
         $this->initialize(QueryBuilder::INSERT_QUERY);
-        $this->_active_query->table($table);
+        $this->query_active->table($table);
         return $this;
     }
     
@@ -124,10 +127,10 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     private function initialize($type) {
-        if ( $this->_active_query !== NULL ) {
-            array_push($this->_hold_queries, $this->_active_query);
+        if ( $this->query_active !== NULL ) {
+            array_push($this->query_hold, $this->query_active);
         }
-        $this->_active_query = new QueryBuilder($type);
+        $this->query_active = new QueryBuilder($type);
         
         return $this;
     }
@@ -137,8 +140,10 @@ class Model {
      * en caso de que exista alguna precargada
      */
     private function finalize() {
-        $this->_log_queries[] = $this->_active_query;
-        $this->_active_query = empty($this->_hold_queries) ? NULL : array_pop($this->_hold_queries);
+        $this->query_log[] = $this->query_active;
+        $this->contains_many = [];
+        $this->contains_one = [];
+        $this->query_active = empty($this->query_hold) ? NULL : array_pop($this->query_hold);
     }
     
     /**
@@ -147,11 +152,11 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function from($table) {
-        if ( $this->_active_query->getType() != QueryBuilder::SELECT_QUERY ) {
+        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
             throw new DataBaseServiceException(
                     sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
         }
-        $this->_active_query->table($table);
+        $this->query_active->table($table);
         return $this;
     }
     
@@ -161,11 +166,11 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function set(array $data) {
-        if ( $this->_active_query->getType() != QueryBuilder::UPDATE_QUERY ) {
+        if ( $this->query_active->getType() != QueryBuilder::UPDATE_QUERY ) {
             throw new DataBaseServiceException(
                     sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::UPDATE_QUERY));
         }
-        $this->_active_query->values($data);
+        $this->query_active->values($data);
         
         return $this;
     }
@@ -176,12 +181,12 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function values(array $data) {
-        if ( $this->_active_query->getType() != QueryBuilder::INSERT_QUERY ) {
+        if ( $this->query_active->getType() != QueryBuilder::INSERT_QUERY ) {
             throw new DataBaseServiceException(
                     sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::INSERT_QUERY));
         }
-        $this->_active_query->fields(array_keys($data));
-        $this->_active_query->values($data);
+        $this->query_active->fields(array_keys($data));
+        $this->query_active->values($data);
         
         return $this;
     }
@@ -217,7 +222,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function where(array $conditions) {
-        $this->_active_query->conditions($conditions);
+        $this->query_active->conditions($conditions);
         return $this;
     }
         
@@ -233,7 +238,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function order( array $order ) {
-        $this->_active_query->order($order);
+        $this->query_active->order($order);
         
         return $this;
     }
@@ -246,7 +251,7 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function limit( $start_limit, $end_limit = NULL ) {
-        $this->_active_query->limit( [$start_limit, $end_limit] );
+        $this->query_active->limit( [$start_limit, $end_limit] );
         
         return $this;
     }
@@ -255,29 +260,190 @@ class Model {
      * Asocia una o varias tablas Ejemplo:
      * <pre>
      * <ul>
-     *  <li><b>Básico</b>: ['table_join' => [ 'join_field_name' => ['table_field', 'table_name', 'operator(=|!=|<=|>=)', 'type(LEFT|INNER)'] ],
-     *  'table_join_2' => ...]</li>
+     *  <li><b>Básico</b>: ['join_table_1' => (array) conditions, 'join_table_2' => (array) conditions, ...] </li>
+     *  <li><b>Avanzado</b>: ['join_table_1' => ['type' => 'LEFT|RIGHT|INNER|OUTER', 'conditions' => (array) conditions]] </li>
      * </ul>
      * </pre>
      * @param array $joins Array con las asociaciones
      * @return \PowerOn\Database\Model
      */
     public function join(array $joins) {
-        if ( $this->_active_query->getType() != QueryBuilder::SELECT_QUERY ) {
+        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
             throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
         }
         
-        $this->_active_query->join( $joins );
+        $this->query_active->join( $joins );
 
         return $this;
     }
+    
+    /**
+     * Asocia una o varias tablas y las incluye en un elemento independiente del array:
+     * <ul>
+     *  <li><b>Básico</b>: ['table_1' => (array) conditions, 'alias_table_2' =>
+     *  ['table' => 'table_name', 'conditions' => (array) conditions, ...] </li>
+     *  <li><b>Avanzado</b>: ['join_table_1' => 
+     * ['table' => (string) real-table-name, 'conditions' => (array) conditions, 'contain' => (array) sub-contains, 'fields' => ...]] </li>
+     * </ul>
+     * Si no se especifica el alias de cada array se utiliza el nombre de la tabla en singular
+     * <pre>
+     * Ejemplo: 
+     *   $database
+     *      ->select()
+     *      ->from('users')
+     *      ->contain([
+     *          [
+     *              'table' => 'employees',
+     *              'conditions' => ['employee.user_id' => 'users.id']
+     *          ]
+     *      )
+     *  ;
+     * </pre>
+     * El resultado sería:
+     * <pre>
+     * (array) [
+     *   'id' => 9,
+     *   'username' => 'usertest',
+     *   'password' => 'xxxx',
+     *   'name' => 'Mr. Example',
+     *   ...
+     *   'employee' => [
+     *      'id' => 27,
+     *      'first_name' => 'Carlos',
+     *      'last_name' => 'Sanchez',
+     *      'legacy' => 'MT-230'
+     *      ...
+     *   ]
+     * ]
+     * </pre>
+     * @param array|string $contains Array con las asociaciones
+     * @return \PowerOn\Database\Model
+     */
+    public function containOne($contains) {
+        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
+            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
+        }
+        $joins = [];
+        $fields = [];
+        
+        if (is_string($contains)) {
+            $contains = [$contains];
+        }
+        
+        foreach ($contains as $alias => $data) {
+            $cfg = (is_string($data) ? ['table' => $data] : $data) + [
+                'fields' => '*',
+                'conditions' => NULL,
+                'table' => $alias
+            ];
+            
+            if ( is_numeric($alias) && $cfg['table'] && !is_numeric($cfg['table']) ) {
+                $alias = Inflector::singularize($cfg['table']);
+            }
+            
+            if ( !$cfg['conditions'] ) {
+                $cfg['conditions'] = [$alias . '.id' => Inflector::singularize($cfg['table']) . '_id'];
+            }
+            
+            $this->query_active->containOne([$alias => $cfg['table']]);
+            
+            $joins[$alias] = ['table' => $cfg['table'], 'conditions' => $cfg['conditions']];
+            if ($cfg['fields'] == '*') {
+                $query = $this->service->query('SHOW COLUMNS FROM `' . $cfg['table'] . '`');
+                while ($column = $query->fetch(PDO::FETCH_ASSOC)) {
+                    $fields[$alias]['__contain_' . $alias . '__' . $column['Field']] = $column['Field'];
+                }
+            } else {
+                foreach ($cfg['fields'] as $field) {
+                    $fields[$alias]['__contain_' . $alias . '__' . $field] = $field;
+                }
+            }
+        }
+        
+        $this->query_active->join( $joins );
+        
+        if ($fields) {
+            $this->query_active->fields($fields);
+        }
+        
+        return $this;
+    }
+    
+    /**
+     * Igual que containOne pero con múltiples resultados 
+     * <pre>
+     * $users = $database->select()->from('users')->containMany('articles' => ['articles.user_id' => 'users.id'])->all()->toArray();
+     * Resultado:
+     * (array) $users [
+     *  'id' => 9
+     *  'username' => 'usertest'
+     *  ...
+     *  'articles' => (array) [
+     *   [
+     *    'id' => 872
+     *    'title' => 'Art 1'
+     *    ...
+     *   ]
+     *   [
+     *    'id' => 873
+     *    'title' => 'Art 2'
+     *    ...
+     *   ]
+     *   ...
+     *  ]
+     * ]
+     * </pre>
+     * @see containOne
+     * @param array $contains
+     * @throws DataBaseServiceException
+     */
+    public function containMany($contains) {
+        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
+            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
+        }
+        
+        if (is_string($contains)) {
+            $contains = [$contains];
+        }
+
+        foreach ($contains as $alias => $containData) {
+            if ( is_string($containData) ) {
+                $containData = [
+                    'table' => $containData
+                ];
+            }
+            $contain = $containData + [
+                'table' => $alias,
+                'key' => Inflector::singularize($this->query_active->getTableName()) . '_id',
+                'parentKey' => 'id',
+                'fields' => '*',
+                'by' => NULL,
+                'order' => [],
+                'join' => [],
+                'containOne' => [],
+                'containMany' => [],
+                'limit' => NULL,
+                'conditions' => [],
+                'combine' => NULL,
+                'column' => NULL
+            ];
+            
+            if (is_array($contain['fields']) && !in_array($contain['key'], $contain['fields'])) {
+                array_push($contain['fields'], $contain['key']);
+            }
+            $this->query_active->containMany([is_numeric($alias) ? $contain['table'] : $alias => $contain]);
+        }
+
+        return $this;
+    }
+    
     
     /**
      * Agrega campo adicionales a la consulta
      * @param string $fields Campos a agregar
      */
     public function fields($fields) {
-        $this->_active_query->fields($fields);
+        $this->query_active->fields($fields);
     }
     
     /**
@@ -285,52 +451,51 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function execute() {
-        if ( $this->_active_query->getType() == QueryBuilder::SELECT_QUERY ) {
+        if ( $this->query_active->getType() == QueryBuilder::SELECT_QUERY ) {
             throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de las acciones (%s, %s, %s)', 
                     QueryBuilder::INSERT_QUERY, QueryBuilder::UPDATE_QUERY, QueryBuilder::DELETE_QUERY));
         }
-        $query = $this->_active_query->getQuery();
-        $params = $this->_active_query->getParams();
+        $query = $this->query_active->getQuery();
+        $params = $this->query_active->getParams();
         
         return $this->query($query, $params);
     }
     
     /**
      * Devuelve todos los resultadaos
-     * @return \PowerOn\Database\Query
+     * @return QueryResult
      */
     public function all() {
-        $query = $this->query( $this->_active_query->getQuery(), $this->_active_query->getParams() );
-        return new QueryResult($query);
+        return $this->query( $this->query_active->getQuery(), $this->query_active->getParams() );
     }
 
     /**
      * Devuelve el primer resultado
-     * @return \PowerOn\Database\Query
+     * @return array
      */
     public function first() {
         $this->limit(1);
 
-        $query = $this->query( $this->_active_query->getQuery(), $this->_active_query->getParams() );
-        return (new QueryResult($query, TRUE))->toArray();
+        $query = $this->query( $this->query_active->getQuery(), $this->query_active->getParams(), TRUE );
+        return $query->toArray();
     }
     
     /**
      *  Devuelve el ultimo resultado
-     * @return \PowerOn\Database\Query
+     * @return array
      */
     public function last() {
-        $this->_active_query->order(['DESC' => 'id']);
+        $this->query_active->order(['DESC' => 'id']);
         return $this->first();
     }
     
     /**
      * Devulve el campo con ID específico
      * @param integer $id
-     * @return \PowerOn\Database\Query
+     * @return array
      */
-    public function id($id) {
-        $this->_active_query->conditions(['id' => $id]);
+    public function byId($id) {
+        $this->query_active->conditions(['id' => $id]);
         return $this->first();
     }
     
@@ -339,9 +504,9 @@ class Model {
      * @return integer
      */
     public function count() {
-        $this->_active_query->fields($this->func()->count());
-        $query = $this->query( $this->_active_query->getQuery(), $this->_active_query->getParams() );
-        return (int)$query->rowCount();
+        $this->query_active->fields($this->func()->count());
+        $query = $this->query( $this->query_active->getQuery(), $this->query_active->getParams() );
+        return $query->count();
     }
     /**
      * Crea una función SQL
@@ -350,11 +515,95 @@ class Model {
      * @return string
      */
     public function func() {
-        if ( $this->_functions === NULL ) {
-            $this->_functions = new Functions();
+        if ( $this->functions === NULL ) {
+            $this->functions = new Functions();
         }
         
-        return $this->_functions;
+        return $this->functions;
+    }
+    
+    /**
+     * Obtiene un resultado por id
+     * @param string $table Tabla a obtener resultados
+     * @param mix $id Clave primaria id
+     * @param array $options [fields, conditions, join, primary_key]
+     * @return 
+     */
+    public function getByIdFrom($table, $id, array $options = []) {
+        $cfg = $this->parseOptions($options);
+        $cfg['conditions'][$cfg['primary_key'] ?: 'id'] = $id;
+   
+        $queryModel = $this->configureQueryByOptions($this->select($cfg['fields'])->from($table), $cfg);
+        
+        return $queryModel->first();
+    }
+    
+    /**
+     * Selecciona los datos de una tabla de forma rápida
+     * @param string $table Tabla de donde obtener los datos
+     * @param array $options Opciones [fields, conditions, join, limit, order]
+     * @return QueryResult
+     */
+    public function selectFrom($table, array $options = []) {
+        $cfg = $this->parseOptions($options);
+        $queryModel = $this->configureQueryByOptions($this->select($cfg['fields'])->from($table), $cfg);
+                      
+        return $queryModel->all();
+    }
+    
+    /**
+     * Configura la consulta en base a las opciones entregadas
+     * @param \PowerOn\Database\Model $queryModel
+     * @param array $options Opciones
+     * @return \PowerOn\Database\Model
+     */
+    private function configureQueryByOptions(Model $queryModel, array $options) {
+        if ($options['conditions']) {
+            $queryModel->where($options['conditions']);
+        }
+        
+        if ($options['join']) {
+            $queryModel->join($options['join']);
+        }
+        
+        if ($options['limit']) {
+            $queryModel->limit(
+                is_array($options['limit']) ? $options['limit'][0] : $options['limit'], 
+                is_array($options['limit'] && key_exists(1, $options['limit'])) ? $options['limit'][1] : NULL
+            );
+        }
+        
+        if ($options['order']) {
+            $queryModel->order($options['order']);
+        }
+        
+        if ($options['containOne']) {
+            $queryModel->containOne($options['containOne']);
+        }
+        
+        if ($options['containMany']) {
+            $queryModel->containMany($options['containMany']);
+        }
+        
+        return $queryModel;
+    }
+    
+    /**
+     * Configura correctamente las opciones enviadas
+     * @param array $options
+     * @return array
+     */
+    private function parseOptions(array $options) {
+        return $options + [
+            'fields' => '*',
+            'conditions' => NULL,
+            'join' => NULL,
+            'limit' => NULL,
+            'order' => NULL,
+            'primary_key' => NULL,
+            'containOne' => [],
+            'containMany' => []
+        ];
     }
     
     /**
@@ -366,11 +615,11 @@ class Model {
         $debug = [];
         
         if ( in_array(self::DEBUG_LAST, $args) ) {
-            $debug = end($this->_log_queries);
+            $debug = end($this->query_log);
         }else if (in_array(self::DEBUG_ACTIVE, $args) ) {
-            $debug = $this->_active_query;
+            $debug = $this->query_active;
         } else {
-            $debug = $this->_log_queries;
+            $debug = $this->query_log;
         }
         
         if ( in_array(self::DEBUG_QUERIES, $args) ) {
@@ -390,7 +639,7 @@ class Model {
      * @return array
      */
     public function getQueryLog() {
-        return $this->_log_query;
+        return $this->query_log;
     }
         
     /**
@@ -398,13 +647,12 @@ class Model {
      * 
      * @param string $query La consulta en la base de datos
      * @param array $params Parámetros a incluir en la consulta
-     * @return \PDOStatement Devuelve el resultado de la consulta, o FALSE en caso de error
+     * @return QueryResult|int|bool Devuelve el resultado de la consulta, o FALSE en caso de error
      */
-    private function query($query, array $params = []) {
+    private function query($query, array $params = [], $unique = FALSE) {
         try {
-            $data = $this->_service->prepare($query);
-            
-            $this->_service->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $data = $this->service->prepare($query);
+            $this->service->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
             
             $data->execute($params);
         } catch (PDOException $e) {
@@ -417,8 +665,32 @@ class Model {
             );
         }
 
-        $result = $this->_active_query->getType() == QueryBuilder::INSERT_QUERY ? $this->_service->lastInsertId() :
-            ($this->_active_query->getType() == QueryBuilder::SELECT_QUERY ? $data : $data->rowCount());
+        $result = $this->query_active->getType() == QueryBuilder::INSERT_QUERY
+                ? $this->service->lastInsertId() 
+                : ($this->query_active->getType() == QueryBuilder::SELECT_QUERY 
+                    ? new QueryResult($data, $unique, $this->query_active->getContainsOne(), $this->query_active->getContainMany()) 
+                    : $data->rowCount()
+                );
+        
+        if ( $this->query_active->getContainMany() ) {
+            $contains = $this->query_active->getContainMany();
+            $containResults = [];
+            
+            foreach ($contains as $alias => $cfg) {
+                $ids = $unique ? $result[$cfg['parentKey']] : $result->column($cfg['parentKey']);
+                $containResults[$alias] = 
+                        $this->configureQueryByOptions(
+                            $this
+                                ->select($cfg['fields'])
+                                ->from($cfg['table'])
+                                ->where([$cfg['key'] . ($unique ? '' : ' IN') => $ids]),
+                            $cfg
+                        )->all()
+                    ;
+            }
+            
+            $result->injectContains($containResults);
+        }
         
         $this->finalize();
         
