@@ -678,7 +678,8 @@ class Model {
             
             foreach ($contains as $alias => $cfg) {
                 $ids = $unique ? $result[$cfg['parentKey']] : $result->column($cfg['parentKey']);
-                $containResults[$alias] = 
+                if ($ids) {
+                    $containResults[$alias] = 
                         $this->configureQueryByOptions(
                             $this
                                 ->select($cfg['fields'])
@@ -687,6 +688,7 @@ class Model {
                             $cfg
                         )->all()
                     ;
+                }
             }
             
             $result->injectContains($containResults);
