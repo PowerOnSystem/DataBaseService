@@ -129,6 +129,9 @@ class QueryResult implements \Iterator, \ArrayAccess {
                             unset($newFields[$field]);
                         }
                     }
+                    if (key_exists($containField, $newFields) && is_null(reset($newFields[$containField])) ) {
+                        $newFields[$containField] = NULL;
+                    }
                 }
                 
                 $newResults[] = $newFields;
