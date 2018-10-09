@@ -98,7 +98,7 @@ class QueryBuilder {
     const DELETE_QUERY = 'delete';
     const INSERT_QUERY = 'insert';
        
-    const OPERATOR_TYPES = ['LIKE', '=', '!=', '<', '>', '<=', '>=', 'NOT', 'NOT LIKE', 'JSON', 'REGEXP', 'IS', 'IN'];
+    const OPERATOR_TYPES = ['LIKE', '=', '!=', '<', '>', '<=', '>=', 'IS NOT', 'NOT', 'NOT LIKE', 'JSON', 'REGEXP', 'IS', 'IN'];
     const CONDITIONAL_TYPES = ['AND', 'OR', 'AND NOT', 'OR NOT', 'NOT'];
     
     /**
