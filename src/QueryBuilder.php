@@ -404,7 +404,7 @@ class QueryBuilder {
      * @return string
      */
     private function processCondition() {
-        return ' WHERE ' . $this->parseCondition($this->conditions, $this->joins ? $this->table : NULL);
+        return $this->conditions ? ' WHERE ' . $this->parseCondition($this->conditions, $this->joins ? $this->table : NULL) : '';
     }
     
     /**
