@@ -303,11 +303,6 @@ class QueryBuilder {
      * @return integer Devuelve el número de filas eliminadas
      */
     private function buildDeleteQuery() {
-        if ( empty($this->conditions) ) {
-            throw new DataBaseServiceException('Atenci&oacute;n, esta funci&oacute;n eliminar&aacute; todo el contenido de la tabla, '
-                    . 'esta acci&oacute;n debe realizarse a trav&eacute;s del administrador '
-                    . 'de su base de datos con la funci&oacute;n TRUNCATE');
-        }
         return 'DELETE FROM ' . $this->table . $this->processCondition();
     }
     
