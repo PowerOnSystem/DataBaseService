@@ -4,7 +4,7 @@
     "description": "Database service.",
     "keywords": ["database", "mysql", "orm", "sql", "pdo"],
     "homepage": "https://github.com/poweronsystem/databaseservice",
-    "license": "GPL",
+    "license": "MIT",
     "authors": [
         {
             "name": "Lucas Sosa",
