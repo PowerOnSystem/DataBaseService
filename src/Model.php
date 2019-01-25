@@ -55,12 +55,17 @@ class Model {
      */
     private $functions = NULL;
     
+    private $settings = [
+        'containReferenceSuffix' => '_id'
+    ];
+    
     /**
      * Crea un objeto modelo para la base de datos
      * @param 
      */
-    public function __construct(PDO $service) {
+    public function __construct(PDO $service, $settings = []) {
         $this->service = $service;
+        $this->settings = $settings + $this->settings;
     }
     
     const DEBUG_FULL = 0;
@@ -342,7 +347,7 @@ class Model {
             }
             
             if ( !$cfg['conditions'] ) {
-                $cfg['conditions'] = [$alias . '.id' => Inflector::singularize($cfg['table']) . '_id'];
+                $cfg['conditions'] = [$alias . '.id' => Inflector::singularize($cfg['table']) . $this->settings['containReferenceSuffix']];
             }
             
             $this->query_active->containOne([$alias => $cfg['table']]);
@@ -414,7 +419,7 @@ class Model {
             }
             $contain = $containData + [
                 'table' => $alias,
-                'key' => Inflector::singularize($this->query_active->getTableName()) . '_id',
+                'key' => Inflector::singularize($this->query_active->getTableName()) . $this->settings['containReferenceSuffix'],
                 'parentKey' => 'id',
                 'fields' => '*',
                 'by' => NULL,
