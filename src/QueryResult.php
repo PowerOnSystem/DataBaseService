@@ -121,8 +121,8 @@ class QueryResult implements \Iterator, \ArrayAccess {
             $allResults = $this->unique ? [$this->results] : $this->results;
             foreach ($allResults as $result) {
                 $newFields = $result;
-                foreach ($this->contains_one as $alias => $table) {
-                    $containField = is_string($alias) ? $alias : $table;
+                foreach ($this->contains_one as $alias => $config) {
+                    $containField = is_string($alias) ? $alias : $config['table'];
                     foreach ($result as $field => $data) {
                         if ( strpos($field, '__contain_' . $alias . '__') !== FALSE ) {
                             $newFields[$containField][substr($field, strlen('__contain_' . $alias . '__'))] = $data;

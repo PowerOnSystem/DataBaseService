@@ -330,37 +330,26 @@ class Model {
         }
         $joins = [];
         $fields = [];
-        
         if (is_string($contains)) {
             $contains = [$contains];
         }
-        
-        foreach ($contains as $alias => $data) {
-            $cfg = (is_string($data) ? ['table' => $data] : $data) + [
-                'fields' => '*',
-                'conditions' => NULL,
-                'table' => $alias
-            ];
+        foreach ($contains as $data) {
+            $cfg = $this->configureContainOne($data);
+            $this->query_active->containOne([$cfg]);
             
-            if ( is_numeric($alias) && $cfg['table'] && !is_numeric($cfg['table']) ) {
-                $alias = Inflector::singularize($cfg['table']);
-            }
-            
-            if ( !$cfg['conditions'] ) {
-                $cfg['conditions'] = [$alias . '.id' => Inflector::singularize($cfg['table']) . $this->settings['containReferenceSuffix']];
-            }
-            
-            $this->query_active->containOne([$alias => $cfg['table']]);
-            
-            $joins[$alias] = ['table' => $cfg['table'], 'conditions' => $cfg['conditions']];
+            $joins[$cfg['alias']] = ['table' => $cfg['table'], 'conditions' => $cfg['conditions']];
             if ($cfg['fields'] == '*') {
                 $query = $this->service->query('SHOW COLUMNS FROM `' . $cfg['table'] . '`');
+                if (!$query) {
+                    throw new DataBaseServiceException(
+                        sprintf('La tabla "%s" no existe', $cfg['table']));
+                }
                 while ($column = $query->fetch(PDO::FETCH_ASSOC)) {
-                    $fields[$alias]['__contain_' . $alias . '__' . $column['Field']] = $column['Field'];
+                    $fields[$cfg['alias']]['__contain_' . $cfg['alias'] . '__' . $column['Field']] = $column['Field'];
                 }
             } else {
                 foreach ($cfg['fields'] as $field) {
-                    $fields[$alias]['__contain_' . $alias . '__' . $field] = $field;
+                    $fields[$cfg['alias']]['__contain_' . $cfg['alias'] . '__' . $field] = $field;
                 }
             }
         }
@@ -372,6 +361,32 @@ class Model {
         }
         
         return $this;
+    }
+    
+    private function configureContainOne($contain) {
+        $cfg = $contain + [
+            'alias' => Inflector::singularize($contain['table']),
+            'table' => NULL,
+            'key' => 'id',
+            'parentTable' => $this->query_active->getTableName(),
+            'parentKey' => Inflector::singularize($contain['table']) . $this->settings['containReferenceSuffix'],
+            'fields' => '*',
+            'by' => NULL,
+            'order' => [],
+            'join' => [],
+            'containOne' => [],
+            'containMany' => [],
+            'limit' => NULL,
+            'conditions' => [],
+            'combine' => NULL,
+            'column' => NULL
+        ];
+
+        if ( !$cfg['conditions'] ) {
+            $cfg['conditions'] = [$cfg['alias'] . '.' . $cfg['key'] => $cfg['parentTable'] . '.' . $cfg['parentKey']];
+        }
+
+        return $cfg;
     }
     
     /**
@@ -676,6 +691,34 @@ class Model {
                     ? new QueryResult($data, $unique, $this->query_active->getContainsOne(), $this->query_active->getContainMany()) 
                     : $data->rowCount()
                 );
+        
+        if ( $this->query_active->getContainsOne() ) {
+            $contains = $this->query_active->getContainsOne();
+            $containResults = [];
+            //d($contains);
+            foreach ($contains as $alias => $cfg) {
+                if ($cfg['containOne'] || $cfg['containMany']) {
+                    foreach ($cfg['containOne'] as $containOneData) {
+                        $containOneCfg = $this->configureContainOne(['parentTable' => $cfg['table']] + $containOneData);
+                        $model = $this
+                            ->select($containOneCfg['fields'] == '*' ? [$containOneCfg['table'] => '*'] : $containOneCfg['fields'])
+                            ->from([$containOneCfg['alias'] => $containOneCfg['table']])
+                            ->where([$containOneCfg['conditions']])
+                        ;
+                        //$this->query_active->addTable($containOneCfg['parentTable']);
+                        //d($this->query_active);
+                        //!d($containOneCfg);
+                        $containResults[$containOneCfg['alias']] = $this->configureQueryByOptions(
+                            $model,
+                            $containOneCfg
+                        )->all();
+                    }
+                }
+            }
+            
+            //!d($containResults);
+            //die;
+        }
         
         if ( $this->query_active->getContainMany() ) {
             $contains = $this->query_active->getContainMany();

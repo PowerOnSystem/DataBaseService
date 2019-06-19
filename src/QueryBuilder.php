@@ -32,6 +32,11 @@ class QueryBuilder {
      */
     private $table = NULL;
     /**
+     * Alias de la tabla principal
+     * @var string
+     */
+    private $tableAlias = NULL;
+    /**
      * Tipo de acción realizada
      * [insert, update, select, delete]
      * @var string
@@ -114,7 +119,8 @@ class QueryBuilder {
      * @param string $table
      */
     public function table($table) {
-        $this->table = $table;
+        $this->table = is_array($table) ? reset($table) : $table;
+        $this->tableAlias = is_array($table) ? key($table) : NULL;
     }
     
     /**
@@ -268,7 +274,7 @@ class QueryBuilder {
     private function buildSelectQuery() {
         return 'SELECT ' 
             . ($this->fields ? $this->processFields() : '*') 
-            . ' FROM ' . $this->table
+            . ' FROM ' . $this->table . ($this->tableAlias ? ' AS ' . $this->tableAlias : '')
             . ($this->joins ? $this->processJoin() : NULL)
             . ($this->conditions ? $this->processCondition() : NULL )
             . ($this->order ? $this->processOrder() : NULL)
@@ -352,7 +358,7 @@ class QueryBuilder {
         $new_fields = [];
         foreach ( $this->fields as $table => $field ) {
             if ($field == '*') {
-                $new_fields[] = '`' . $this->table . '`.*';
+                $new_fields[] = '`' . ($this->tableAlias ?: $this->table) . '`.*';
                 if (count($this->fields) == 1 && $this->tables) {
                     foreach ($this->tables as $joined_table) {
                         $new_fields[] = '`' . $joined_table . '`.*';
@@ -529,6 +535,7 @@ class QueryBuilder {
         }
         $findField = substr($field, 0, strpos($field, ' ') ?: strlen($field));
         $findTable = explode('.', $field);
+
         return [
             $operator, 
             count($findTable) > 1 ? $findTable[1] : $findField,
@@ -542,5 +549,9 @@ class QueryBuilder {
      */
     public function getTableName() {
         return $this->table;
+    }
+    
+    public function addTable($table) {
+        $this->tables[] = $table;
     }
 }
