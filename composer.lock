@@ -1,23 +1,23 @@
 {
     "_readme": [
         "This file locks the dependencies of your project to a known state",
-        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f372bc26859c8cd3ce21cf10d90ef4cb",
+    "content-hash": "1c620d423e70d34b1f3b007cadf46451",
     "packages": [
         {
             "name": "poweronsystem/webutility",
-            "version": "v0.1.0",
+            "version": "dev-master",
             "source": {
                 "type": "git",
                 "url": "https://github.com/PowerOnSystem/WebUtility.git",
-                "reference": "d9981d801bb0b25e34fd5225472e7fc2caeab1b6"
+                "reference": "2d55fdcbd13f35dfed12dbe49b096b674472fb86"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PowerOnSystem/WebUtility/zipball/d9981d801bb0b25e34fd5225472e7fc2caeab1b6",
-                "reference": "d9981d801bb0b25e34fd5225472e7fc2caeab1b6",
+                "url": "https://api.github.com/repos/PowerOnSystem/WebUtility/zipball/2d55fdcbd13f35dfed12dbe49b096b674472fb86",
+                "reference": "2d55fdcbd13f35dfed12dbe49b096b674472fb86",
                 "shasum": ""
             },
             "require": {
@@ -34,7 +34,7 @@
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
-                "GPL"
+                "MIT"
             ],
             "authors": [
                 {
@@ -52,7 +52,7 @@
                 "string formatter",
                 "utilities"
             ],
-            "time": "2017-07-20T12:18:18+00:00"
+            "time": "2019-06-19T10:36:32+00:00"
         }
     ],
     "packages-dev": [
@@ -117,7 +117,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "poweronsystem/webutility": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": [],

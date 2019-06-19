@@ -14,7 +14,7 @@
         }
     ],
     "require": {
-        "poweronsystem/webutility": "^0.1.0"
+        "poweronsystem/webutility": "dev-master"
     },
     "require-dev": {
         "kint-php/kint": "^2.1"

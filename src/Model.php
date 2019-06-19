@@ -369,7 +369,7 @@ class Model {
             'table' => NULL,
             'key' => 'id',
             'parentTable' => $this->query_active->getTableName(),
-            'parentKey' => Inflector::singularize($contain['table']) . $this->settings['containReferenceSuffix'],
+            'parentKey' => Inflector::camelize(Inflector::singularize($contain['table'])) . $this->settings['containReferenceSuffix'],
             'fields' => '*',
             'by' => NULL,
             'order' => [],
