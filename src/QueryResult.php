@@ -44,26 +44,31 @@ class QueryResult implements \Iterator, \ArrayAccess {
      */
     private $unique = FALSE;
     /**
-     * Tablas incluidas con contain()
+     * Prepara los resultados para representarlos en "column", "combine" o "by"
      * @var array
      */
-    private $contains_one = [];
+    private $prepare = [];
     /**
      * Resultados de inclusión múltiple
      * @var array
      */
     private $contains_many = [];
+    /**
+     * Resultados de las relaciones
+     * @var array
+     */
+    private $contains = [];
     
     /**
      * Crea un nuevo resultado de consulta select
      * @param \PDOStatement $pdo La respuesta PDO
      * @param boolean $unique Especifica si se trata de un resultado único
      */
-    public function __construct(\PDOStatement $pdo, $unique = FALSE, array $containsOne = [], array $containsMany = []) {
+    public function __construct(\PDOStatement $pdo, $unique = FALSE, array $contains = [], array $prepare = []) {
         $this->pdo_statement = $pdo;
         $this->unique = $unique;
-        $this->contains_one = $containsOne;
-        $this->contains_many = $containsMany;
+        $this->contains = $contains;
+        $this->prepare = $prepare;
     }
     /**
      * Iterator current
@@ -112,33 +117,56 @@ class QueryResult implements \Iterator, \ArrayAccess {
             return $this->results;
         }
         
-        $this->results = $this->unique 
-                ? $this->pdo_statement->fetch(\PDO::FETCH_ASSOC) 
-                : $this->pdo_statement->fetchAll(PDO::FETCH_ASSOC);
+        $this->results = $this->unique
+            ? $this->pdo_statement->fetch(\PDO::FETCH_ASSOC) 
+            : $this->pdo_statement->fetchAll(\PDO::FETCH_ASSOC)
+        ;
         
-        if ( $this->contains_one ) {
+        if ( (key_exists('hasOne', $this->contains) && $this->contains['hasOne']) 
+            || (key_exists('belongsTo', $this->contains) && $this->contains['belongsTo'])  ) {
             $newResults = [];
             $allResults = $this->unique ? [$this->results] : $this->results;
+            $contains = (key_exists('hasOne', $this->contains) && $this->contains['hasOne']) 
+                ? $this->contains['hasOne'] 
+                : $this->contains['belongsTo']
+            ;
             foreach ($allResults as $result) {
                 $newFields = $result;
-                foreach ($this->contains_one as $alias => $config) {
-                    $containField = is_string($alias) ? $alias : $config['table'];
+                foreach ($contains as $config) {
+                    $alias = $config['alias'];
                     foreach ($result as $field => $data) {
-                        if ( strpos($field, '__contain_' . $alias . '__') !== FALSE ) {
-                            $newFields[$containField][substr($field, strlen('__contain_' . $alias . '__'))] = $data;
+                        if ( strpos($field, '__contain_' . $config['alias'] . '__') !== FALSE ) {
+                            $newFields[$config['alias']][substr($field, strlen('__contain_' . $alias . '__'))] = $data;
                             unset($newFields[$field]);
                         }
                     }
-                    if (key_exists($containField, $newFields) && is_null(reset($newFields[$containField])) ) {
-                        $newFields[$containField] = NULL;
+                    if (key_exists($config['alias'], $newFields) && is_null(reset($newFields[$config['alias']])) ) {
+                        $newFields[$config['alias']] = NULL;
                     }
                 }
-                
                 $newResults[] = $newFields;
             }
             
             $this->results = $this->unique ? reset($newResults) : $newResults;
-            $this->contains_one = [];
+        }
+        
+        if ($this->prepare) {
+            foreach ($this->prepare as $type => $prepare) {
+                switch ($type) {
+                    case 'column': {
+                        return $this->column($prepare);
+                    }
+                    case 'combine': {
+                        return $this->combine(
+                            is_array($prepare) && key_exists('valueField', $prepare) ? $prepare['valueField'] : $prepare, 
+                            is_array($prepare) && key_exists('keyField', $prepare) ? $prepare['keyField'] : 'id', 
+                            is_array($prepare) && key_exists('glue', $prepare) ? $prepare['glue'] : ' ');
+                    }
+                    case 'by': {
+                        return $this->by($prepare);
+                    }
+                }
+            }
         }
 
         return $this->results;
@@ -161,10 +189,8 @@ class QueryResult implements \Iterator, \ArrayAccess {
      * @param string $field_key Nombre del campo para la clave, por defecto es id
      * @return array
      */
-    public function combine($field_value, $field_key = 'id') {
-        $results = $this->toArray();
-
-        return $this->_combine($field_value, $field_key, $results);
+    public function combine($field_value, $field_key = 'id', $multiple_field_glue = ' ') {
+        return $this->_combine($field_value, $field_key, $this->toArray(), $multiple_field_glue);
     }
     /**
      * Devuelve todos los resultados utilizando el un campo específico como indice
@@ -243,64 +269,31 @@ class QueryResult implements \Iterator, \ArrayAccess {
         return $this->results;
     }
 
-    public function injectContains(array $containsMany) {
-        /* @var $containsMany QueryResult[] */
-        foreach ($containsMany as $alias => $contain) {
-            $containData = $this->contains_many[$alias];
-            if ($this->unique) {
-                $this->results[$alias] = $contain->toArray();
-            } else {
-                $newResults = [];
-                $allContains = $contain->toArray();
-                $allContainByKey = $contain->groupedBy($containData['key']);
-                foreach ($this->results as $key => $result) {
-                    $parentKeyValue = $result[$containData['parentKey']];
-                    $newResults[$key] = $result;
-                    
-                    $contains = $this->setResults(
-                        key_exists($parentKeyValue, $allContainByKey) ? $allContainByKey[$parentKeyValue] : []
-                    );
-
-                    if ($containData['combine'] && !$containData['column']) {
-                        $contains = $contain->combine($containData['combine'][0], $containData['combine'][1]);
-                    } else if ($containData['by']) {
-                        $contains = $contain->by($containData['by']);
-                    }
-                    
-                    if ($containData['column']) {
-                        $contains = $contain->column($containData['column']);
-                    }
-                    
-                    $newResults[$key][$alias] = $contains;
-                    $contain->setResults($allContains);
-                }
-                
-                $this->results = $newResults;
-            }
-        }
-    }
-    
-    private function _combine($field_value, $field_key, array $results) {
+    private function _combine($field_value, $field_key, array $results, $multiple_field_glue) {
         return array_combine(
                 array_column($results, $field_key),
-                $this->_join($field_value, $results)
+                $this->_join($field_value, $results, $multiple_field_glue)
             )
         ;
     }
     
     private function _join($field_value, array $results, $glue = ' ') {
-        return !is_array($field_value) 
-            ? array_column($results, $field_value)
-            : array_map(
-                function($result) use ($field_value, $glue) { 
-                    return implode($glue, array_map(
-                            function($field) use ($result) {
-                                return $result[$field]; 
-                            }, $field_value
-                        )
-                    );
-                }, $results
-            );
+        return is_callable($field_value) 
+            ? array_map(function($result) use ($field_value) { return $field_value($result); }, $results)
+            : (!is_array($field_value) 
+                ? array_column($results, $field_value)
+                : array_map(
+                    function($result) use ($field_value, $glue) { 
+                        return implode($glue, array_map(
+                                function($field) use ($result) {
+                                    return $result[$field]; 
+                                }, $field_value
+                            )
+                        );
+                    }, $results
+                )
+            )
+        ;
     }
 
     public function offsetSet($offset, $valor) {

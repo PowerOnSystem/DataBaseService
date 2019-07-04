@@ -88,15 +88,16 @@ class QueryBuilder {
      */
     private $query = NULL;
     /**
-     * Tablas incluidas en array independiente de resultado unico
+     * Relacions configuradas en la consulta
      * @var array
      */
-    private $contains_one = [];
+    private $contains = [];
+    
     /**
-     * Tablas incluidas en array independiente de múltiples resultados
+     * Prepara para organizar resultados "column", "combine" y "by"
      * @var array
      */
-    private $contains_many = [];
+    private $prepare = [];
     
     const SELECT_QUERY = 'select';
     const UPDATE_QUERY = 'update';
@@ -110,7 +111,7 @@ class QueryBuilder {
      * Crea una nueva consulta
      * @param string $type Tipo de consulta
      */
-    public function __construct($type) {
+    public function __construct($type = NULL) {
         $this->type = $type;
     }
     
@@ -189,40 +190,37 @@ class QueryBuilder {
     
     /**
      * Asocia tablas a una consutla de tipo <b>select</b>
+     * @param string $tableName Nombre de la tabla
+     * @param string $mode Modo de relación
      * @param array $contain Array con las asociaciones
      * @throws DataBaseServiceException
      */
-    public function containOne($contain) {
+    public function contain($tableName, $mode, $contain) {
         if ( $this->type != self::SELECT_QUERY ) {
             throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
         }
         
-        $this->contains_one += $contain;
-        $this->tables += array_keys($contain);
-    }
-    
-    public function containMany($contain) {
-        if ( $this->type != self::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
+        if (!key_exists($mode, $this->contains)) {
+            $this->contains[$mode] = [];
         }
         
-        $this->contains_many += $contain;
-    }
-    
-    /**
-     * Devuelve los contains one
-     * @return array
-     */
-    public function getContainsOne() {
-        return $this->contains_one;
+        $this->contains[$mode] += [$tableName => $contain];
     }
     
     /**
      * Devuelve los contains many
      * @return array
      */
-    public function getContainMany() {
-        return $this->contains_many;
+    public function getContains() {
+        return $this->contains;
+    }
+    
+    /**
+     * Devuelve los elementos de preparación de resultados
+     * @return array
+     */
+    public function getPrepare() {
+        return $this->prepare;
     }
     
     /**
@@ -253,6 +251,14 @@ class QueryBuilder {
      */
     public function getParams() {
         return ($this->values + $this->condition_fields);
+    }
+    
+    /**
+     * Setea el tipo de consulta
+     * @param string $type
+     */
+    public function setType($type) {
+        $this->type = $type;
     }
     
     /**
@@ -358,7 +364,7 @@ class QueryBuilder {
         $new_fields = [];
         foreach ( $this->fields as $table => $field ) {
             if ($field == '*') {
-                $new_fields[] = '`' . ($this->tableAlias ?: $this->table) . '`.*';
+                $new_fields[] = '`' . $this->getTableAlias() . '`.*';
                 if (count($this->fields) == 1 && $this->tables) {
                     foreach ($this->tables as $joined_table) {
                         $new_fields[] = '`' . $joined_table . '`.*';
@@ -374,12 +380,10 @@ class QueryBuilder {
                     }
                     $new_fields[] = implode(',', $new_sub_fields);
                 } else {
-                    $new_fields[] = $field == '*' && !in_array($table, $this->tables) 
-                        ? '`' . $this->table . '`.*' 
-                        : (
-                            (is_string($table) && in_array($table, $this->tables) ? '`' . $table . '`.' : '') 
-                            . ($field == '*' ? '*' : '`' . $field . '`' . ( !is_numeric($table) ? ' AS `' . $table . '`' : '') )
-                        );
+                    $new_fields[] = 
+                        (is_string($table) && in_array($table, $this->tables) ? '`' . $table . '`.' : '`' . $this->getTableAlias() . '`.') 
+                        . '`' . $field . '`' . ( !is_numeric($table) ? ' AS `' . $table . '`' : '')
+                    ;
                 }
             }
         }
@@ -519,6 +523,16 @@ class QueryBuilder {
 
         return $cond;
     }
+    
+    /**
+     * Prepara para organizar los próximos resultados automáticamente
+     * @param string $type
+     * @param mix $data
+     */
+    public function prepare($type, $data){
+        $this->prepare[$type] = $data;
+    }
+    
     /**
      * Devuelve la tabla el operador y el campo encontrado en el field
      * @param string $field
@@ -549,6 +563,14 @@ class QueryBuilder {
      */
     public function getTableName() {
         return $this->table;
+    }
+    
+    /**
+     * Devuelve el nombre alias o el nombre de la tabla principal
+     * @return string
+     */
+    public function getTableAlias($force = FALSE) {
+        return $force ? $this->tableAlias : ($this->tableAlias ?: $this->table);
     }
     
     public function addTable($table) {

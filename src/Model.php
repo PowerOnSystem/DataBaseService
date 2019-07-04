@@ -56,9 +56,10 @@ class Model {
     private $functions = NULL;
     
     private $settings = [
-        'containReferenceSuffix' => '_id'
+        'containReferenceSuffix' => '_id',
+        'camelizeVariablesName' => TRUE
     ];
-    
+        
     /**
      * Crea un objeto modelo para la base de datos
      * @param 
@@ -72,6 +73,92 @@ class Model {
     const DEBUG_QUERIES = 1;
     const DEBUG_LAST = 2;
     const DEBUG_ACTIVE = 3;
+    
+    /**
+     * Obtiene asociaciones automáticas
+     * @param type $data
+     */
+    public function contain(array $data = []) {
+        $options = ['hasMany', 'hasOne', 'belongsTo', 'belongsToMany', 'custom'];
+        
+        if (!array_intersect_key(array_flip($options), $data)) {
+            throw new DataBaseServiceException('La configuración de las asociaciones fueron mal expresadas.', $data);
+        }
+        
+        foreach ($data as $mode => $settings) {
+            if (!is_array($settings)) {
+                $settings = [$settings];
+            }
+            
+            foreach ($settings as $key => $value) {
+                $tableName = is_numeric($key) ? $value : $key;
+                $this->query_active->contain(
+                    $tableName, $mode, 
+                    $this->getRelationshipConfiguration($tableName, $this->query_active->getTableAlias(), $value, $mode)
+                );
+            }
+        }
+        
+        return $this;
+    }
+       
+    private function getRelationshipConfiguration($tableName, $parentAliasName, $requestData, $mode, $isInsertedData = FALSE) {
+        $aliasTableName = $mode == 'hasOne' || $mode == 'belongsTo' ? Inflector::singularize($tableName) : $tableName;
+
+        $bindingKey = 'id';
+        $foreignKey = ($this->settings['camelizeVariablesName'] 
+                ? Inflector::camelize($mode == 'hasMany' ? Inflector::singularize($parentAliasName) : $aliasTableName) 
+                : ($mode == 'hasMany' ? Inflector::singularize($parentAliasName) : $aliasTableName)
+            ) . $this->settings['containReferenceSuffix']
+        ;
+
+        $data = is_array($requestData) ? $requestData : [];
+        
+        $options = [
+            'alias' => $aliasTableName,
+            'table' => $tableName,
+            'bindingKey' => $bindingKey,
+            'foreignKey' => $foreignKey,
+            'conditions' => $isInsertedData || $mode == 'hasMany' || $mode == 'belongsToMany'
+                ? [] 
+                : [$aliasTableName . '.' . $bindingKey => $parentAliasName . '.' . $foreignKey]
+        ] + $data;
+        if (key_exists('conditions', $data)) {
+            $options['conditions'] = $mode == 'custom' 
+                ? $data['conditions'] 
+                : array_merge($options['conditions'], $data['conditions'])
+            ;
+        }
+        
+        $parsedOptions = $this->parseOptions($options);
+        
+        if ( ($mode == 'hasOne' || $mode == 'belongsTo') && !$isInsertedData) {
+            $fields = [];
+            if ($parsedOptions['fields'] == '*') {
+                $showColumnsQuery = 'SHOW COLUMNS FROM `' . $tableName . '`';
+                $this->query_log[] = $showColumnsQuery;
+                $query = $this->service->query($showColumnsQuery);
+                while ($column = $query->fetch(PDO::FETCH_ASSOC)) {
+                    $fields[$aliasTableName]['__contain_' . $aliasTableName . '__' . $column['Field']] = $column['Field'];
+                }
+            } else {
+                foreach ($parsedOptions['fields'] as $field) {
+                    $fields[$aliasTableName]['__contain_' . $aliasTableName . '__' . $field] = $field;
+                }
+            }
+            $this->query_active->join([
+                $aliasTableName => [
+                    'table' => $tableName,
+                    'conditions' => $parsedOptions['conditions']
+                ]
+            ]);
+            
+            $this->query_active->fields($fields);
+        }
+
+        
+        return $parsedOptions;
+    }
     
     /**
      * Inicia una consulta de tipo SELECT 
@@ -131,7 +218,7 @@ class Model {
      * @param string $type
      * @return \PowerOn\Database\Model
      */
-    private function initialize($type) {
+    private function initialize($type = NULL) {
         if ( $this->query_active !== NULL ) {
             array_push($this->query_hold, $this->query_active);
         }
@@ -280,183 +367,7 @@ class Model {
         $this->query_active->join( $joins );
 
         return $this;
-    }
-    
-    /**
-     * Asocia una o varias tablas y las incluye en un elemento independiente del array:
-     * <ul>
-     *  <li><b>Básico</b>: ['table_1' => (array) conditions, 'alias_table_2' =>
-     *  ['table' => 'table_name', 'conditions' => (array) conditions, ...] </li>
-     *  <li><b>Avanzado</b>: ['join_table_1' => 
-     * ['table' => (string) real-table-name, 'conditions' => (array) conditions, 'contain' => (array) sub-contains, 'fields' => ...]] </li>
-     * </ul>
-     * Si no se especifica el alias de cada array se utiliza el nombre de la tabla en singular
-     * <pre>
-     * Ejemplo: 
-     *   $database
-     *      ->select()
-     *      ->from('users')
-     *      ->contain([
-     *          [
-     *              'table' => 'employees',
-     *              'conditions' => ['employee.user_id' => 'users.id']
-     *          ]
-     *      )
-     *  ;
-     * </pre>
-     * El resultado sería:
-     * <pre>
-     * (array) [
-     *   'id' => 9,
-     *   'username' => 'usertest',
-     *   'password' => 'xxxx',
-     *   'name' => 'Mr. Example',
-     *   ...
-     *   'employee' => [
-     *      'id' => 27,
-     *      'first_name' => 'Carlos',
-     *      'last_name' => 'Sanchez',
-     *      'legacy' => 'MT-230'
-     *      ...
-     *   ]
-     * ]
-     * </pre>
-     * @param array|string $contains Array con las asociaciones
-     * @return \PowerOn\Database\Model
-     */
-    public function containOne($contains) {
-        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
-        }
-        $joins = [];
-        $fields = [];
-        if (is_string($contains)) {
-            $contains = [$contains];
-        }
-        foreach ($contains as $data) {
-            $cfg = $this->configureContainOne($data);
-            $this->query_active->containOne([$cfg]);
-            
-            $joins[$cfg['alias']] = ['table' => $cfg['table'], 'conditions' => $cfg['conditions']];
-            if ($cfg['fields'] == '*') {
-                $query = $this->service->query('SHOW COLUMNS FROM `' . $cfg['table'] . '`');
-                if (!$query) {
-                    throw new DataBaseServiceException(
-                        sprintf('La tabla "%s" no existe', $cfg['table']));
-                }
-                while ($column = $query->fetch(PDO::FETCH_ASSOC)) {
-                    $fields[$cfg['alias']]['__contain_' . $cfg['alias'] . '__' . $column['Field']] = $column['Field'];
-                }
-            } else {
-                foreach ($cfg['fields'] as $field) {
-                    $fields[$cfg['alias']]['__contain_' . $cfg['alias'] . '__' . $field] = $field;
-                }
-            }
-        }
-        
-        $this->query_active->join( $joins );
-        
-        if ($fields) {
-            $this->query_active->fields($fields);
-        }
-        
-        return $this;
-    }
-    
-    private function configureContainOne($contain) {
-        $cfg = $contain + [
-            'alias' => Inflector::singularize($contain['table']),
-            'table' => NULL,
-            'key' => 'id',
-            'parentTable' => $this->query_active->getTableName(),
-            'parentKey' => Inflector::camelize(Inflector::singularize($contain['table'])) . $this->settings['containReferenceSuffix'],
-            'fields' => '*',
-            'by' => NULL,
-            'order' => [],
-            'join' => [],
-            'containOne' => [],
-            'containMany' => [],
-            'limit' => NULL,
-            'conditions' => [],
-            'combine' => NULL,
-            'column' => NULL
-        ];
-
-        if ( !$cfg['conditions'] ) {
-            $cfg['conditions'] = [$cfg['alias'] . '.' . $cfg['key'] => $cfg['parentTable'] . '.' . $cfg['parentKey']];
-        }
-
-        return $cfg;
-    }
-    
-    /**
-     * Igual que containOne pero con múltiples resultados 
-     * <pre>
-     * $users = $database->select()->from('users')->containMany('articles' => ['articles.user_id' => 'users.id'])->all()->toArray();
-     * Resultado:
-     * (array) $users [
-     *  'id' => 9
-     *  'username' => 'usertest'
-     *  ...
-     *  'articles' => (array) [
-     *   [
-     *    'id' => 872
-     *    'title' => 'Art 1'
-     *    ...
-     *   ]
-     *   [
-     *    'id' => 873
-     *    'title' => 'Art 2'
-     *    ...
-     *   ]
-     *   ...
-     *  ]
-     * ]
-     * </pre>
-     * @see containOne
-     * @param array $contains
-     * @throws DataBaseServiceException
-     */
-    public function containMany($contains) {
-        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
-        }
-        
-        if (is_string($contains)) {
-            $contains = [$contains];
-        }
-
-        foreach ($contains as $alias => $containData) {
-            if ( is_string($containData) ) {
-                $containData = [
-                    'table' => $containData
-                ];
-            }
-            $contain = $containData + [
-                'table' => $alias,
-                'key' => Inflector::singularize($this->query_active->getTableName()) . $this->settings['containReferenceSuffix'],
-                'parentKey' => 'id',
-                'fields' => '*',
-                'by' => NULL,
-                'order' => [],
-                'join' => [],
-                'containOne' => [],
-                'containMany' => [],
-                'limit' => NULL,
-                'conditions' => [],
-                'combine' => NULL,
-                'column' => NULL
-            ];
-            
-            if (is_array($contain['fields']) && !in_array($contain['key'], $contain['fields'])) {
-                array_push($contain['fields'], $contain['key']);
-            }
-            $this->query_active->containMany([is_numeric($alias) ? $contain['table'] : $alias => $contain]);
-        }
-
-        return $this;
-    }
-    
+    }    
     
     /**
      * Agrega campo adicionales a la consulta
@@ -546,12 +457,12 @@ class Model {
      * Obtiene un resultado por id
      * @param string $table Tabla a obtener resultados
      * @param mix $id Clave primaria id
-     * @param array $options [fields, conditions, join, primary_key]
+     * @param array $options [fields, conditions, join, primaryKey]
      * @return 
      */
     public function getByIdFrom($table, $id, array $options = []) {
         $cfg = $this->parseOptions($options);
-        $cfg['conditions'][$cfg['primary_key'] ?: 'id'] = $id;
+        $cfg['conditions'][$cfg['primaryKey'] ?: 'id'] = $id;
    
         $queryModel = $this->configureQueryByOptions($this->select($cfg['fields'])->from($table), $cfg);
         
@@ -578,6 +489,14 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     private function configureQueryByOptions(Model $queryModel, array $options) {
+        if ($options['fields']) {
+            $queryModel->fields($options['fields']);
+        }
+        
+        if ($options['table']) {
+            $queryModel->from($options['alias'] ? [$options['alias'] => $options['table']] : $options['table']);
+        }
+        
         if ($options['conditions']) {
             $queryModel->where($options['conditions']);
         }
@@ -597,14 +516,22 @@ class Model {
             $queryModel->order($options['order']);
         }
         
-        if ($options['containOne']) {
-            $queryModel->containOne($options['containOne']);
+        if ($options['contain']) {
+            $queryModel->contain($options['contain']);
         }
         
-        if ($options['containMany']) {
-            $queryModel->containMany($options['containMany']);
+        if ($options['combine']) {
+            $queryModel->query_active->prepare('combine', $options['combine']);
         }
         
+        if ($options['column']) {
+            $queryModel->query_active->prepare('column', $options['column']);
+        }
+        
+        if ($options['by']) {
+            $queryModel->query_active->prepare('by', $options['by']);
+        }
+
         return $queryModel;
     }
     
@@ -614,16 +541,33 @@ class Model {
      * @return array
      */
     private function parseOptions(array $options) {
-        return $options + [
+        $newOptions = $options + [
+            'table' => NULL,
+            'alias' => NULL,
             'fields' => '*',
             'conditions' => NULL,
             'join' => NULL,
             'limit' => NULL,
             'order' => NULL,
-            'primary_key' => NULL,
-            'containOne' => [],
-            'containMany' => []
+            'primaryKey' => NULL,
+            'contain' => [],
+            'combine' => NULL,
+            'column' => NULL,
+            'by' => NULL
         ];
+        
+        $relations = ['hasOne', 'hasMany', 'belongsTo', 'belongsToMany', 'custom'];
+        foreach ($relations as $relationship) {
+            if (key_exists($relationship, $newOptions)) {
+                $newOptions['contain'][$relationship] = key_exists($relationship, $newOptions['contain']) 
+                    ? array_merge($newOptions['contain'][$relationship], $newOptions[$relationship])
+                    : $newOptions[$relationship]
+                ;
+                unset($newOptions[$relationship]);
+            }
+        }
+        
+        return $newOptions;
     }
     
     /**
@@ -645,7 +589,7 @@ class Model {
         if ( in_array(self::DEBUG_QUERIES, $args) ) {
             $new_debug = [];
             foreach ($debug as $db) {
-                $new_debug[] = $db->debug();
+                $new_debug[] = is_string($db) ? ['query' => $db, 'params' => []] : $db->debug();
             }
             
             $debug = $new_debug;
@@ -686,64 +630,103 @@ class Model {
         }
 
         $result = $this->query_active->getType() == QueryBuilder::INSERT_QUERY
-                ? $this->service->lastInsertId() 
-                : ($this->query_active->getType() == QueryBuilder::SELECT_QUERY 
-                    ? new QueryResult($data, $unique, $this->query_active->getContainsOne(), $this->query_active->getContainMany()) 
-                    : $data->rowCount()
-                );
+            ? $this->service->lastInsertId() 
+            : ($this->query_active->getType() == QueryBuilder::SELECT_QUERY 
+                ? new QueryResult($data, $unique, $this->query_active->getContains(), $this->query_active->getPrepare()) 
+                : $data->rowCount()
+            )
+        ;
         
-        if ( $this->query_active->getContainsOne() ) {
-            $contains = $this->query_active->getContainsOne();
-            $containResults = [];
-            //d($contains);
-            foreach ($contains as $alias => $cfg) {
-                if ($cfg['containOne'] || $cfg['containMany']) {
-                    foreach ($cfg['containOne'] as $containOneData) {
-                        $containOneCfg = $this->configureContainOne(['parentTable' => $cfg['table']] + $containOneData);
-                        $model = $this
-                            ->select($containOneCfg['fields'] == '*' ? [$containOneCfg['table'] => '*'] : $containOneCfg['fields'])
-                            ->from([$containOneCfg['alias'] => $containOneCfg['table']])
-                            ->where([$containOneCfg['conditions']])
-                        ;
-                        //$this->query_active->addTable($containOneCfg['parentTable']);
-                        //d($this->query_active);
-                        //!d($containOneCfg);
-                        $containResults[$containOneCfg['alias']] = $this->configureQueryByOptions(
-                            $model,
-                            $containOneCfg
-                        )->all();
+        if ( $this->query_active->getContains() ) {
+            $allContains = $this->query_active->getContains();
+            $results = $unique ? [$result->toArray()] : $result->toArray();
+            foreach ($allContains as $mode => $contains) {
+                foreach ($contains as $containData) {
+                    if ($mode == 'hasMany' || $mode == 'belongsToMany') {
+                        $results = $this->prepareRelationship(
+                            $results, 
+                            NULL, 
+                            $mode, 
+                            $containData
+                        );
+                    }
+                    $subContainElements = $containData['contain'] ?: [];
+                    
+                    foreach ($subContainElements as $subMode => $subContainData) {
+                        if (($subMode == 'hasOne' || $subMode == 'belongsTo') && ($mode == 'belongsToMany' || $mode == 'hasMany')) {
+                            continue;
+                        }
+                        foreach ($subContainData as $key => $subContainConfig) {
+                            $resolvedRelationship = $this->getRelationshipConfiguration(
+                                is_numeric($key) ? $subContainConfig : $key,
+                                $containData['alias'],
+                                $subContainConfig, 
+                                $subMode,
+                                TRUE
+                            );
+
+                            $results = $this->prepareRelationship($results, $containData['alias'], $subMode, $resolvedRelationship);
+                        }
                     }
                 }
             }
-            
-            //!d($containResults);
-            //die;
-        }
-        
-        if ( $this->query_active->getContainMany() ) {
-            $contains = $this->query_active->getContainMany();
-            $containResults = [];
-            
-            foreach ($contains as $alias => $cfg) {
-                $ids = $unique ? $result[$cfg['parentKey']] : $result->column($cfg['parentKey']);
-                if ($ids) {
-                    $containResults[$alias] = 
-                        $this->configureQueryByOptions(
-                            $this
-                                ->select($cfg['fields'])
-                                ->from($cfg['table'])
-                                ->where([$cfg['key'] . ($unique ? '' : ' IN') => $ids]),
-                            $cfg
-                        )->all()
-                    ;
-                }
+            if ($results) {
+                $result->setResults($unique ? reset($results) : $results);
             }
-            
-            $result->injectContains($containResults);
         }
-        
+
         $this->finalize();
         
         return $result;
+    }
+    
+    private function getRelationshipForeignKeyValue($mode, $alias, $relationship, $data) {
+        $key = $mode != 'hasMany' ? $relationship['foreignKey'] : $relationship['bindingKey'];
+        
+        if ( ($alias && !key_exists($key, $data[$alias])) || (!$alias && !key_exists($key, $data))  ) {
+            throw new DataBaseServiceException(
+                sprintf(
+                    'Falta el campo vinculador principal con la clave "%s"', 
+                    $key
+                )
+            , ['settings' => $relationship, 'data' => $data, 'mode' => $mode, 'alias' => $alias, 'debug' => $this->debug(1)]);
+        }
+        $foreignKey = $alias ? $data[$alias][$key] : $data[$key];
+        
+        return $mode == 'belongsToMany' ? json_decode($foreignKey, JSON_NUMERIC_CHECK) : $foreignKey;
+    }
+    
+    private function prepareRelationship($results, $alias, $mode, $relationship) {
+        $newQuery = $this->initialize(QueryBuilder::SELECT_QUERY)->from($alias);
+        foreach ($results as $key => $r) {
+            if (!$alias || (key_exists($alias, $r) && $r[$alias])) {
+                
+                $relationship['conditions'][] = [
+                    $relationship['alias'] . '.' . 
+                    $relationship[$mode != 'hasMany' ? 'bindingKey' : 'foreignKey'] . 
+                    ($mode == 'belongsToMany' ? ' IN' : '') => 
+                    $this->getRelationshipForeignKeyValue($mode, $alias, $relationship, $r)
+                ];
+
+                $subModel = $this->configureQueryByOptions(
+                    $newQuery,
+                    $relationship
+                );
+
+                $result = 
+                    $mode == 'hasOne' || $mode == 'belognsTo'
+                        ? $subModel->first()
+                        : $subModel->all()->toArray()
+                ;
+                
+                if ($alias) {
+                    $results[$key][$alias][$relationship['alias']] = $result;
+                } else {
+                    $results[$key][$relationship['alias']] = $result;
+                }
+            }
+        }
+        
+        return $results;
     }
 }
