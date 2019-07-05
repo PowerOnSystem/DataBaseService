@@ -192,19 +192,14 @@ class QueryBuilder {
      * Asocia tablas a una consutla de tipo <b>select</b>
      * @param string $tableName Nombre de la tabla
      * @param string $mode Modo de relación
-     * @param array $contain Array con las asociaciones
+     * @param array $relationship Array con las asociaciones
      * @throws DataBaseServiceException
      */
-    public function contain($tableName, $mode, $contain) {
+    public function contain($relationship) {
         if ( $this->type != self::SELECT_QUERY ) {
             throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
         }
-        
-        if (!key_exists($mode, $this->contains)) {
-            $this->contains[$mode] = [];
-        }
-        
-        $this->contains[$mode] += [$tableName => $contain];
+        $this->contains[$relationship['mode'] . '-' . $relationship['alias']] = $relationship;
     }
     
     /**

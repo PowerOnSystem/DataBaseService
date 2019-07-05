@@ -121,32 +121,31 @@ class QueryResult implements \Iterator, \ArrayAccess {
             ? $this->pdo_statement->fetch(\PDO::FETCH_ASSOC) 
             : $this->pdo_statement->fetchAll(\PDO::FETCH_ASSOC)
         ;
-        
-        if ( (key_exists('hasOne', $this->contains) && $this->contains['hasOne']) 
-            || (key_exists('belongsTo', $this->contains) && $this->contains['belongsTo'])  ) {
-            $newResults = [];
-            $allResults = $this->unique ? [$this->results] : $this->results;
-            $contains = (key_exists('hasOne', $this->contains) && $this->contains['hasOne']) 
-                ? $this->contains['hasOne'] 
-                : $this->contains['belongsTo']
-            ;
-            foreach ($allResults as $result) {
-                $newFields = $result;
-                foreach ($contains as $config) {
-                    $alias = $config['alias'];
-                    foreach ($result as $field => $data) {
-                        if ( strpos($field, '__contain_' . $config['alias'] . '__') !== FALSE ) {
-                            $newFields[$config['alias']][substr($field, strlen('__contain_' . $alias . '__'))] = $data;
-                            unset($newFields[$field]);
-                        }
+        $newResults = [];
+        $allResults = $this->unique ? [$this->results] : $this->results;
+        foreach ($allResults as $result) {
+            $newFields = $result;
+            $alias = NULL;
+            foreach ($result as $field => $data) {
+                if (preg_match('/__contain_/', $field)) {
+                    $matches = [];
+                    preg_match('/__contain_([0-9a-zA-Z_-]+)__/', $field, $matches);
+                    $alias = key_exists(1, $matches) ? $matches[1] : NULL;
+                    if (!$alias) {
+                        throw new \LogicException(sprintf('No se pudo identificar el alias de la tabla en el campo "%s"', $field));
                     }
-                    if (key_exists($config['alias'], $newFields) && is_null(reset($newFields[$config['alias']])) ) {
-                        $newFields[$config['alias']] = NULL;
-                    }
+                    $fieldName = preg_replace('/__contain_([0-9a-zA-Z_-]+)__/', '', $field);
+                    $newFields[$alias][$fieldName] = $data;
+                    unset($newFields[$field]);
                 }
-                $newResults[] = $newFields;
             }
-            
+            if (key_exists($alias, $newFields) && is_null(reset($newFields[$alias])) ) {
+                $newFields[$alias] = NULL;
+            }
+            $newResults[] = $newFields;
+        }
+        
+        if ($newResults) {
             $this->results = $this->unique ? reset($newResults) : $newResults;
         }
         

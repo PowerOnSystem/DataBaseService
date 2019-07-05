@@ -79,30 +79,37 @@ class Model {
      * @param type $data
      */
     public function contain(array $data = []) {
-        $options = ['hasMany', 'hasOne', 'belongsTo', 'belongsToMany', 'custom'];
+        $contains = $this->getProcessedRelationshipData($data, $this->query_active->getTableAlias());
+        
+        foreach ($contains as $contain) {
+            $this->query_active->contain($contain);
+        }
+        
+        return $this;
+    }
+    
+    private function getProcessedRelationshipData($data, $parentAliasName) {
+        $options = ['hasMany', 'hasOne', 'belongsTo', 'belongsToMany'];
         
         if (!array_intersect_key(array_flip($options), $data)) {
             throw new DataBaseServiceException('La configuración de las asociaciones fueron mal expresadas.', $data);
         }
-        
+        $contains = [];
         foreach ($data as $mode => $settings) {
             if (!is_array($settings)) {
                 $settings = [$settings];
             }
             
             foreach ($settings as $key => $value) {
-                $tableName = is_numeric($key) ? $value : $key;
-                $this->query_active->contain(
-                    $tableName, $mode, 
-                    $this->getRelationshipConfiguration($tableName, $this->query_active->getTableAlias(), $value, $mode)
-                );
+                $contains[] = $this->getRelationshipData($key, $value, $parentAliasName, $mode);
             }
         }
         
-        return $this;
+        return $contains;
     }
-       
-    private function getRelationshipConfiguration($tableName, $parentAliasName, $requestData, $mode, $isInsertedData = FALSE) {
+    
+    private function getRelationshipData($requestTableName, $requestData, $parentAliasName, $mode) {
+        $tableName = is_numeric($requestTableName) ? $requestData : $requestTableName;
         $aliasTableName = $mode == 'hasOne' || $mode == 'belongsTo' ? Inflector::singularize($tableName) : $tableName;
 
         $bindingKey = 'id';
@@ -119,20 +126,22 @@ class Model {
             'table' => $tableName,
             'bindingKey' => $bindingKey,
             'foreignKey' => $foreignKey,
-            'conditions' => $isInsertedData || $mode == 'hasMany' || $mode == 'belongsToMany'
+            'parentAlias' => $parentAliasName,
+            'mode' => $mode,
+            'conditions' => $mode == 'hasMany' || $mode == 'belongsToMany'
                 ? [] 
                 : [$aliasTableName . '.' . $bindingKey => $parentAliasName . '.' . $foreignKey]
         ] + $data;
-        if (key_exists('conditions', $data)) {
-            $options['conditions'] = $mode == 'custom' 
-                ? $data['conditions'] 
-                : array_merge($options['conditions'], $data['conditions'])
-            ;
-        }
         
+        if (key_exists('replaceConditions', $data)) {
+            $options['conditions'] = $data['replaceConditions'];
+        } else if (key_exists('conditions', $data)) {
+            $options['conditions'] = array_merge($options['conditions'], $data['conditions']);
+        }
+                
         $parsedOptions = $this->parseOptions($options);
         
-        if ( ($mode == 'hasOne' || $mode == 'belongsTo') && !$isInsertedData) {
+        if ($mode == 'hasOne' || $mode == 'belongsTo') {
             $fields = [];
             if ($parsedOptions['fields'] == '*') {
                 $showColumnsQuery = 'SHOW COLUMNS FROM `' . $tableName . '`';
@@ -640,38 +649,17 @@ class Model {
         if ( $this->query_active->getContains() ) {
             $allContains = $this->query_active->getContains();
             $results = $unique ? [$result->toArray()] : $result->toArray();
-            foreach ($allContains as $mode => $contains) {
-                foreach ($contains as $containData) {
-                    if ($mode == 'hasMany' || $mode == 'belongsToMany') {
-                        $results = $this->prepareRelationship(
-                            $results, 
-                            NULL, 
-                            $mode, 
-                            $containData
-                        );
-                    }
-                    $subContainElements = $containData['contain'] ?: [];
-                    
-                    foreach ($subContainElements as $subMode => $subContainData) {
-                        if (($subMode == 'hasOne' || $subMode == 'belongsTo') && ($mode == 'belongsToMany' || $mode == 'hasMany')) {
-                            continue;
-                        }
-                        foreach ($subContainData as $key => $subContainConfig) {
-                            $resolvedRelationship = $this->getRelationshipConfiguration(
-                                is_numeric($key) ? $subContainConfig : $key,
-                                $containData['alias'],
-                                $subContainConfig, 
-                                $subMode,
-                                TRUE
-                            );
-
-                            $results = $this->prepareRelationship($results, $containData['alias'], $subMode, $resolvedRelationship);
-                        }
+            $newResults = [];
+            foreach ($allContains as $main) {
+                if (in_array($main['mode'], ['hasMany', 'belongsToMany'])) {
+                    $newResults = $results;
+                    foreach ($results as $key => $r) {
+                        $newResults[$key] = $this->getInjectedRelations($r, $main);
                     }
                 }
             }
-            if ($results) {
-                $result->setResults($unique ? reset($results) : $results);
+            if ($newResults) {
+                $result->setResults($unique ? reset($newResults) : $newResults);
             }
         }
 
@@ -679,54 +667,40 @@ class Model {
         
         return $result;
     }
-    
-    private function getRelationshipForeignKeyValue($mode, $alias, $relationship, $data) {
-        $key = $mode != 'hasMany' ? $relationship['foreignKey'] : $relationship['bindingKey'];
+
+    private function getInjectedRelations(array $data, array $relationship) {
+        $keyField = $relationship['mode'] != 'hasMany' ? $relationship['foreignKey'] : $relationship['bindingKey'];
+
+        $ids = key_exists($keyField, $data) 
+            ? ($relationship['mode'] == 'belongsToMany' ? json_decode($data[$keyField], JSON_NUMERIC_CHECK) : $data[$keyField])
+            : FALSE
+        ;
         
-        if ( ($alias && !key_exists($key, $data[$alias])) || (!$alias && !key_exists($key, $data))  ) {
+        if ( $ids === FALSE ) {
             throw new DataBaseServiceException(
-                sprintf(
-                    'Falta el campo vinculador principal con la clave "%s"', 
-                    $key
-                )
-            , ['settings' => $relationship, 'data' => $data, 'mode' => $mode, 'alias' => $alias, 'debug' => $this->debug(1)]);
+                sprintf('Falta el campo vinculador principal con la clave "%s"', $keyField),
+                ['relationship' => $relationship, 'data' => $data, 'debug' => $this->debug(1), 'ids' => $ids]
+            );
         }
-        $foreignKey = $alias ? $data[$alias][$key] : $data[$key];
-        
-        return $mode == 'belongsToMany' ? json_decode($foreignKey, JSON_NUMERIC_CHECK) : $foreignKey;
-    }
-    
-    private function prepareRelationship($results, $alias, $mode, $relationship) {
-        $newQuery = $this->initialize(QueryBuilder::SELECT_QUERY)->from($alias);
-        foreach ($results as $key => $r) {
-            if (!$alias || (key_exists($alias, $r) && $r[$alias])) {
-                
-                $relationship['conditions'][] = [
-                    $relationship['alias'] . '.' . 
-                    $relationship[$mode != 'hasMany' ? 'bindingKey' : 'foreignKey'] . 
-                    ($mode == 'belongsToMany' ? ' IN' : '') => 
-                    $this->getRelationshipForeignKeyValue($mode, $alias, $relationship, $r)
-                ];
 
-                $subModel = $this->configureQueryByOptions(
-                    $newQuery,
-                    $relationship
-                );
+        $conditions = [
+            $relationship['alias'] . '.' 
+            . $relationship[$relationship['mode'] != 'hasMany' ? 'bindingKey' : 'foreignKey']
+            . (is_array($ids) ? ' IN' : '') => $ids
+        ];
 
-                $result = 
-                    $mode == 'hasOne' || $mode == 'belognsTo'
-                        ? $subModel->first()
-                        : $subModel->all()->toArray()
-                ;
-                
-                if ($alias) {
-                    $results[$key][$alias][$relationship['alias']] = $result;
-                } else {
-                    $results[$key][$relationship['alias']] = $result;
-                }
-            }
-        }
+        $newQuery = $this->initialize(QueryBuilder::SELECT_QUERY);
         
-        return $results;
+        $relationshipResults = $this->configureQueryByOptions(
+            $newQuery->where($conditions),
+            $relationship
+        );
+        
+        $data[$relationship['alias']] = $relationship['mode'] == 'hasOne' || $relationship['mode'] == 'belongsTo'
+            ? $relationshipResults->first()
+            : $relationshipResults->all()->toArray()
+        ;
+
+        return $data;
     }
 }
