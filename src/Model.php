@@ -472,7 +472,7 @@ class Model {
     public function getByIdFrom($table, $id, array $options = []) {
         $cfg = $this->parseOptions($options);
         $cfg['conditions'][$cfg['primaryKey'] ?: 'id'] = $id;
-   
+
         $queryModel = $this->configureQueryByOptions($this->select($cfg['fields'])->from($table), $cfg);
         
         return $queryModel->first();
@@ -653,19 +653,21 @@ class Model {
         
         if ( $this->query_active->getContains() ) {
             $allContains = $this->query_active->getContains();
+
             $results = $unique ? [$result->toArray()] : $result->toArray();
-            $newResults = [];
+            $newResults = $results;
             foreach ($allContains as $main) {
                 if (in_array($main['mode'], ['hasMany', 'belongsToMany'])) {
                     $newResults = $results;
                     foreach ($results as $key => $r) {
                         $newResults[$key] = $this->getInjectedRelations($r, $main);
                     }
+                    
+                    $results = $newResults;
                 }
             }
-            if ($newResults) {
-                $result->setResults($unique ? reset($newResults) : $newResults);
-            }
+            
+            $result->setResults($unique ? reset($newResults) : $newResults);
         }
 
         $this->finalize();
