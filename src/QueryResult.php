@@ -44,7 +44,7 @@ class QueryResult implements \Iterator, \ArrayAccess {
      */
     private $unique = FALSE;
     /**
-     * Prepara los resultados para representarlos en "column", "combine" o "by"
+     * Prepara los resultados para representarlos en "column", "columnUnique", "combine" o "by"
      * @var array
      */
     private $prepare = [];
@@ -155,6 +155,9 @@ class QueryResult implements \Iterator, \ArrayAccess {
                     case 'column': {
                         return $this->column($prepare);
                     }
+                    case 'columnUnique': {
+                        return array_unique($this->column($prepare));
+                    }
                     case 'combine': {
                         return $this->combine(
                             is_array($prepare) && key_exists('valueField', $prepare) ? $prepare['valueField'] : $prepare, 
@@ -178,6 +181,15 @@ class QueryResult implements \Iterator, \ArrayAccess {
      */
     public function column($field) {
         return $this->_join($field, $this->toArray());
+    }
+    
+    /**
+     * Devuelve un array con los datos de la columna especificada filtrando resultados unicos
+     * @param string $field nombre de la columna
+     * @return array
+     */
+    public function columnUnique($field) {
+        return array_unique($this->column($field));
     }
     
     /**

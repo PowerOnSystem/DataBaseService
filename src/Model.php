@@ -537,6 +537,10 @@ class Model {
             $queryModel->query_active->prepare('column', $options['column']);
         }
         
+        if ($options['columnUnique']) {
+            $queryModel->query_active->prepare('columnUnique', $options['columnUnique']);
+        }
+        
         if ($options['by']) {
             $queryModel->query_active->prepare('by', $options['by']);
         }
@@ -562,6 +566,7 @@ class Model {
             'contain' => [],
             'combine' => NULL,
             'column' => NULL,
+            'columnUnique' => NULL,
             'by' => NULL
         ];
         

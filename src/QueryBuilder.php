@@ -94,7 +94,7 @@ class QueryBuilder {
     private $contains = [];
     
     /**
-     * Prepara para organizar resultados "column", "combine" y "by"
+     * Prepara para organizar resultados "column", "columnUnique", "combine",  "by"
      * @var array
      */
     private $prepare = [];

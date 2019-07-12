@@ -13,7 +13,7 @@ $times = [];
 try {
     try {
         //Creamos un servicio PDO para la base de datos MySQL con la clase que viene en la libreria
-        $service = new PDO(sprintf('mysql:host=%s;dbname=%s;port=%s', 'localhost', 'unitest', 3306), 'root', '****');
+        $service = new PDO(sprintf('mysql:host=%s;dbname=%s;port=%s', 'localhost', 'unitest', 3306), 'root', '***');
     } catch (PDOException $e) {
         throw new PowerOn\Database\DataBaseServiceException($e->getMessage(), ['pdo' => $e]);
     }
@@ -22,28 +22,41 @@ try {
         'containReferenceSuffix' => 'Id',
     ] );
     $times['creacion database'] = number_format((microtime(TRUE) - $time), 4) . 'ms';
-        
-    $works = $database
-        ->select()
-        ->from('products')
-        ->contain([
-            'belongsToMany' => [
-                'optionals' => [
-                    'fields' => ['id', 'name', 'draw', 'categoryId'],
-                    'combine' => [
-                        'valueField' => function($results) {
-                            return $results['name'] . ' / (' . $results['draw'] . ')';
-                        }
+
+    $typology = $database
+      ->select()
+      ->from('typologies')
+      ->where(['typologies.id' => 10])
+      ->contain([
+        'belongsTo' => [
+            'works' => [
+                'belongsTo' => ['users']
+            ]
+        ],
+        'hasMany' => [
+            'items' => [
+                'belongsTo' => [
+                    'products', 'processes'
+                ],
+                'hasMany' => [
+                    'item_panels' => [
+                        'hasMany' => [
+                            'item_glass_calcules' => [
+                                'belongsTo' => 'glasses'
+                            ]
+                        ]
                     ]
                 ]
             ]
-        ])
-        ->first()
+        ]
+      ])
+      
+      ->first()
     ;
-    
+
     $times['consultas finalizadas'] = number_format((microtime(TRUE) - $time), 4) . 'ms';
     $times['tiempo de consultas'] = number_format($times['consultas finalizadas'] - $times['creacion database'], 4) . 'ms';
-    !d($works);
+    !d($typology);
     !d($database->debug(PowerOn\Database\Model::DEBUG_QUERIES));
     $newTime = microtime(TRUE);
     $times['tiempo de consulta simple'] = number_format((microtime(TRUE) - $newTime), 4) . 'ms';
