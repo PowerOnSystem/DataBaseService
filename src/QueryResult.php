@@ -126,6 +126,9 @@ class QueryResult implements \Iterator, \ArrayAccess {
         foreach ($allResults as $result) {
             $newFields = $result;
             $alias = NULL;
+            if (!$result) {
+                continue;
+            }
             foreach ($result as $field => $data) {
                 if (preg_match('/__contain_/', $field)) {
                     $matches = [];

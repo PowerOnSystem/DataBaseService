@@ -114,8 +114,8 @@ class Model {
 
         $bindingKey = 'id';
         $foreignKey = ($this->settings['camelizeVariablesName'] 
-                ? Inflector::camelize($mode == 'hasMany' ? Inflector::singularize($parentAliasName) : $aliasTableName) 
-                : ($mode == 'hasMany' ? Inflector::singularize($parentAliasName) : $aliasTableName)
+                ? Inflector::camelize($mode == 'hasMany' || $mode == 'hasOne' ? Inflector::singularize($parentAliasName) : $aliasTableName) 
+                : ($mode == 'hasMany' || $mode == 'hasOne' ? Inflector::singularize($parentAliasName) : $aliasTableName)
             ) . $this->settings['containReferenceSuffix']
         ;
 
@@ -662,7 +662,21 @@ class Model {
                     foreach ($results as $key => $r) {
                         $newResults[$key] = $this->getInjectedRelations($r, $main);
                     }
-                    
+
+                    $results = $newResults;
+                } else if ($main['contain']) {
+                    $relationship = $this->getProcessedRelationshipData($main['contain'], $main['table'])[0];
+                    $relationship['conditions'] = [];
+                    $newResults = $results;
+                    foreach ($results as $key => $r) {
+                        if ( !key_exists($main['alias'], $r) || !$r[$main['alias']]) {
+                            d($r);
+                            d($main);
+                            die;
+                            continue;
+                        }
+                        $newResults[$key][$main['alias']] = $this->getInjectedRelations($r[$main['alias']], $relationship);
+                    }
                     $results = $newResults;
                 }
             }
@@ -676,8 +690,11 @@ class Model {
     }
 
     private function getInjectedRelations(array $data, array $relationship) {
-        $keyField = $relationship['mode'] != 'hasMany' ? $relationship['foreignKey'] : $relationship['bindingKey'];
-
+        $keyField = $relationship['mode'] == 'hasMany' || $relationship['mode'] == 'hasOne' 
+            ? $relationship['bindingKey'] 
+            : $relationship['foreignKey']
+        ;
+        //d($data);
         $ids = key_exists($keyField, $data) 
             ? ($relationship['mode'] == 'belongsToMany' ? json_decode($data[$keyField], JSON_NUMERIC_CHECK) : $data[$keyField])
             : FALSE
@@ -692,10 +709,10 @@ class Model {
 
         $conditions = [
             $relationship['alias'] . '.' 
-            . $relationship[$relationship['mode'] != 'hasMany' ? 'bindingKey' : 'foreignKey']
+            . $relationship[in_array($relationship['mode'], ['hasMany', 'hasOne']) ? 'foreignKey' : 'bindingKey']
             . (is_array($ids) ? ' IN' : '') => $ids
         ];
-
+        //d($conditions);
         $newQuery = $this->initialize(QueryBuilder::SELECT_QUERY);
         
         $relationshipResults = $this->configureQueryByOptions(

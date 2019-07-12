@@ -23,40 +23,33 @@ try {
     ] );
     $times['creacion database'] = number_format((microtime(TRUE) - $time), 4) . 'ms';
 
-    $typology = $database
-      ->select()
-      ->from('typologies')
-      ->where(['typologies.id' => 10])
-      ->contain([
-        'belongsTo' => [
-            'works' => [
-                'belongsTo' => ['users']
-            ]
-        ],
-        'hasMany' => [
+    $data = $database
+        ->select()
+        ->from('item_glass_calcules')
+        ->order(['DESC' => ['id']])
+        ->where(['typologyId' => 10])
+        ->contain([
+          'belongsTo' => [
+            'glasses' => [
+              'hasOne' => [
+                'user_glass_settings'
+              ]
+            ], 
+            'glass_calcules', 
             'items' => [
-                'belongsTo' => [
-                    'products', 'processes'
-                ],
-                'hasMany' => [
-                    'item_panels' => [
-                        'hasMany' => [
-                            'item_glass_calcules' => [
-                                'belongsTo' => 'glasses'
-                            ]
-                        ]
-                    ]
-                ]
+              'belongsTo' => [
+                'products'
+              ]
             ]
-        ]
-      ])
-      
-      ->first()
-    ;
+          ]
+        ])
+        ->all()
+        ->toArray()
+      ;
 
     $times['consultas finalizadas'] = number_format((microtime(TRUE) - $time), 4) . 'ms';
     $times['tiempo de consultas'] = number_format($times['consultas finalizadas'] - $times['creacion database'], 4) . 'ms';
-    !d($typology);
+    !d($data);
     !d($database->debug(PowerOn\Database\Model::DEBUG_QUERIES));
     $newTime = microtime(TRUE);
     $times['tiempo de consulta simple'] = number_format((microtime(TRUE) - $newTime), 4) . 'ms';
