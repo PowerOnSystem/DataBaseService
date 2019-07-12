@@ -130,7 +130,8 @@ class Model {
             'mode' => $mode,
             'conditions' => $mode == 'hasMany' || $mode == 'belongsToMany'
                 ? [] 
-                : [$aliasTableName . '.' . $bindingKey => $parentAliasName . '.' . $foreignKey]
+                : [$aliasTableName . '.' . ($mode == 'hasOne' ? $foreignKey : $bindingKey) 
+                    => $parentAliasName . '.' . ($mode == 'hasOne' ? $bindingKey : $foreignKey)]
         ] + $data;
         
         if (key_exists('replaceConditions', $data)) {
