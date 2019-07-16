@@ -643,7 +643,7 @@ class Model {
                 ]
             );
         }
-
+        /* @var $result QueryResult */
         $result = $this->query_active->getType() == QueryBuilder::INSERT_QUERY
             ? $this->service->lastInsertId() 
             : ($this->query_active->getType() == QueryBuilder::SELECT_QUERY 
@@ -656,6 +656,7 @@ class Model {
             $allContains = $this->query_active->getContains();
 
             $results = $unique ? [$result->toArray()] : $result->toArray();
+            
             $newResults = $results;
             foreach ($allContains as $main) {
                 if (in_array($main['mode'], ['hasMany', 'belongsToMany'])) {
@@ -671,9 +672,6 @@ class Model {
                     $newResults = $results;
                     foreach ($results as $key => $r) {
                         if ( !key_exists($main['alias'], $r) || !$r[$main['alias']]) {
-                            d($r);
-                            d($main);
-                            die;
                             continue;
                         }
                         $newResults[$key][$main['alias']] = $this->getInjectedRelations($r[$main['alias']], $relationship);

@@ -27,7 +27,6 @@ try {
         ->select()
         ->from('item_glass_calcules')
         ->order(['DESC' => ['id']])
-        ->where(['typologyId' => 10])
         ->contain([
           'belongsTo' => [
             'glasses' => [
@@ -45,7 +44,7 @@ try {
         ])
         ->all()
         ->toArray()
-      ;
+    ;
 
     $times['consultas finalizadas'] = number_format((microtime(TRUE) - $time), 4) . 'ms';
     $times['tiempo de consultas'] = number_format($times['consultas finalizadas'] - $times['creacion database'], 4) . 'ms';

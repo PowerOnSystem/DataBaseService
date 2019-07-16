@@ -123,12 +123,15 @@ class QueryResult implements \Iterator, \ArrayAccess {
         ;
         $newResults = [];
         $allResults = $this->unique ? [$this->results] : $this->results;
+
         foreach ($allResults as $result) {
             $newFields = $result;
             $alias = NULL;
+            $allAlias = [];
             if (!$result) {
                 continue;
             }
+            
             foreach ($result as $field => $data) {
                 if (preg_match('/__contain_/', $field)) {
                     $matches = [];
@@ -137,14 +140,19 @@ class QueryResult implements \Iterator, \ArrayAccess {
                     if (!$alias) {
                         throw new \LogicException(sprintf('No se pudo identificar el alias de la tabla en el campo "%s"', $field));
                     }
+                    $allAlias[$alias] = $alias;
                     $fieldName = preg_replace('/__contain_([0-9a-zA-Z_-]+)__/', '', $field);
                     $newFields[$alias][$fieldName] = $data;
                     unset($newFields[$field]);
                 }
             }
-            if (key_exists($alias, $newFields) && is_null(reset($newFields[$alias])) ) {
-                $newFields[$alias] = NULL;
+
+            foreach ($allAlias as $storedAlias) {
+                if (key_exists($storedAlias, $newFields) && !array_filter($newFields[$storedAlias]) ) {
+                    $newFields[$storedAlias] = NULL;
+                }
             }
+            
             $newResults[] = $newFields;
         }
         
