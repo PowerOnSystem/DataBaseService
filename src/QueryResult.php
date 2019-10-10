@@ -122,7 +122,7 @@ class QueryResult implements \Iterator, \ArrayAccess {
             : $this->pdo_statement->fetchAll(\PDO::FETCH_ASSOC)
         ;
         $newResults = [];
-        $allResults = $this->unique ? [$this->results] : $this->results;
+        $allResults = !$this->results ? [] : ($this->unique ? [$this->results] : $this->results);
 
         foreach ($allResults as $result) {
             $newFields = $result;
