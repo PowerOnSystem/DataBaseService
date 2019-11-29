@@ -180,8 +180,10 @@ class QueryBuilder {
      * @throws DataBaseServiceException
      */
     public function join(array $joins) {
-        if ( $this->type != self::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', self::SELECT_QUERY));
+        if ( $this->type != self::SELECT_QUERY && $this->type != self::UPDATE_QUERY) {
+            throw new DataBaseServiceException(
+                sprintf('Este m&eacute;todo es exclusivo de las acciones (%s y %s)', self::SELECT_QUERY, self::UPDATE_QUERY)
+            );
         }
         
         $this->joins += $joins;
@@ -289,7 +291,9 @@ class QueryBuilder {
      * @return integer Devuelve el número de filas afectadas
      */
     private function buildUpdateQuery() {
-        return 'UPDATE ' . $this->table . ' SET ' 
+        return 'UPDATE ' . $this->table 
+            . ($this->joins ? $this->processJoin() : NULL)
+            . ' SET ' 
             . $this->processUpdateValues() 
             . ($this->conditions ? $this->processCondition() : NULL );
     }

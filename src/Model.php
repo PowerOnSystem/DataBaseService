@@ -370,8 +370,12 @@ class Model {
      * @return \PowerOn\Database\Model
      */
     public function join(array $joins) {
-        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY ) {
-            throw new DataBaseServiceException(sprintf('Este m&eacute;todo es exclusivo de la acci&oacute;n (%s)', QueryBuilder::SELECT_QUERY));
+        if ( $this->query_active->getType() != QueryBuilder::SELECT_QUERY 
+                && $this->query_active->getType() != QueryBuilder::UPDATE_QUERY) {
+            throw new DataBaseServiceException(
+                sprintf('Este m&eacute;todo es exclusivo de las acciones (%s y %s)',
+                    QueryBuilder::SELECT_QUERY, QueryBuilder::UPDATE_QUERY)
+            );
         }
         
         $this->query_active->join( $joins );
@@ -688,12 +692,14 @@ class Model {
         return $result;
     }
 
-    private function getInjectedRelations(array $data, array $relationship) {
+    private function getInjectedRelations($data, array $relationship) {
         $keyField = $relationship['mode'] == 'hasMany' || $relationship['mode'] == 'hasOne' 
             ? $relationship['bindingKey'] 
             : $relationship['foreignKey']
         ;
-        //d($data);
+        if (!$data){
+          return [];
+        }
         $ids = key_exists($keyField, $data) 
             ? ($relationship['mode'] == 'belongsToMany' ? json_decode($data[$keyField], JSON_NUMERIC_CHECK) : $data[$keyField])
             : FALSE
