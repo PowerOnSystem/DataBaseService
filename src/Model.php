@@ -671,16 +671,18 @@ class Model {
 
                     $results = $newResults;
                 } else if ($main['contain']) {
-                    $relationship = $this->getProcessedRelationshipData($main['contain'], $main['table'])[0];
-                    $relationship['conditions'] = [];
+                    $relationships = $this->getProcessedRelationshipData($main['contain'], $main['table']);
                     $newResults = $results;
-                    foreach ($results as $key => $r) {
-                        if ( !key_exists($main['alias'], $r) || !$r[$main['alias']]) {
-                            continue;
-                        }
-                        $newResults[$key][$main['alias']] = $this->getInjectedRelations($r[$main['alias']], $relationship);
+                    foreach ($relationships as $relationship) {
+                      $relationship['conditions'] = [];
+                      foreach ($results as $key => $r) {
+                          if ( !key_exists($main['alias'], $r) || !$r[$main['alias']]) {
+                              continue;
+                          }
+                          $newResults[$key][$main['alias']] = $this->getInjectedRelations($r[$main['alias']], $relationship);
+                      }
+                      $results = $newResults;
                     }
-                    $results = $newResults;
                 }
             }
             
