@@ -79,10 +79,12 @@ class Model {
      * @param type $data
      */
     public function contain(array $data = []) {
-        $contains = $this->getProcessedRelationshipData($data, $this->query_active->getTableAlias());
-        
-        foreach ($contains as $contain) {
-            $this->query_active->contain($contain);
+        if ($data) {   
+            $contains = $this->getProcessedRelationshipData($data, $this->query_active->getTableAlias());
+
+            foreach ($contains as $contain) {
+                $this->query_active->contain($contain);
+            }
         }
         
         return $this;
